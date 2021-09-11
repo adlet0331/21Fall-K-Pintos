@@ -12,4 +12,4 @@ while [ -h "$SOURCE" ]; do
 done
 DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
-PATH=$DIR/utils:$PATH
+PATH=/root/21Fall-K-Pintos/utils:$PATH
