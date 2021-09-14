@@ -107,6 +107,8 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
+
+	int64_t time_to_run;                /* Wait until this time. */
 };
 
 /* If false (default), use round-robin scheduler.
@@ -140,6 +142,9 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+int64_t thread_get_time_to_run(void);
+void thread_set_time_to_run(int64_t);
 
 void do_iret (struct intr_frame *tf);
 

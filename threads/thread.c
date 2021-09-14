@@ -63,6 +63,8 @@ static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
 
+static bool priority_compare (const struct list_elem *, const struct list_elem *, void *);
+
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -207,6 +209,9 @@ thread_create (const char *name, int priority,
 	/* Add to run queue. */
 	thread_unblock (t);
 
+	if (priority > thread_current ()->priority)
+		thread_yield ();
+
 	return tid;
 }
 
@@ -311,7 +316,10 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
+	int prev_priority = thread_current ()->priority;
 	thread_current ()->priority = new_priority;
+	if (prev_priority > new_priority)
+		thread_yield ();
 }
 
 /* Returns the current thread's priority. */
@@ -345,6 +353,16 @@ int
 thread_get_recent_cpu (void) {
 	/* TODO: Your implementation goes here */
 	return 0;
+}
+
+void
+thread_set_time_to_run(int64_t time) {
+	thread_current ()->time_to_run = time;
+}
+
+int64_t
+thread_get_time_to_run(void) {
+	return thread_current ()->time_to_run;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -409,6 +427,14 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+	t->time_to_run = 0;
+}
+
+static bool
+priority_compare (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED) {
+	struct thread *a = list_entry (a_, struct thread, elem);
+	struct thread *b = list_entry (b_, struct thread, elem);
+	return a->priority > b->priority;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -420,8 +446,18 @@ static struct thread *
 next_thread_to_run (void) {
 	if (list_empty (&ready_list))
 		return idle_thread;
-	else
-		return list_entry (list_pop_front (&ready_list), struct thread, elem);
+	else {
+		list_sort(&ready_list, priority_compare, NULL);
+		for (struct list_elem *e = list_front (&ready_list); e != list_end (&ready_list); e = list_next(e)) {
+			struct thread *t = list_entry (e, struct thread, elem);
+			int64_t current_time = timer_ticks();
+			if (t->time_to_run <= current_time) {
+				list_remove(e);
+				return t;
+			}
+		}
+		return idle_thread;
+	}
 }
 
 /* Use iretq to launch the thread */
