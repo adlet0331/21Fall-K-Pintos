@@ -104,17 +104,21 @@ sema_try_down (struct semaphore *sema) {
    This function may be called from an interrupt handler. */
 void
 sema_up (struct semaphore *sema) {
+	struct thread *t= NULL;
 	enum intr_level old_level;
 
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
 	if (!list_empty (&sema->waiters)) {
-		struct thread *t = list_entry (list_pop_front (&sema->waiters), struct thread, elem);
+		list_sort (&sema->waiters, priority_compare, NULL);
+		t = list_entry (list_pop_front (&sema->waiters), struct thread, elem);
 		t->lock = NULL;
 		thread_unblock (t);
 	}
 	sema->value++;
+	if (t != NULL && t->priority > thread_current ()->priority)
+		thread_yield ();
 	intr_set_level (old_level);
 }
 
@@ -325,9 +329,11 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
-	if (!list_empty (&cond->waiters))
+	if (!list_empty (&cond->waiters)) {
+		list_sort (&cond->waiters, cond_waiters_compare, NULL);
 		sema_up (&list_entry (list_pop_front (&cond->waiters),
 					struct semaphore_elem, elem)->semaphore);
+	}
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -343,4 +349,13 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 
 	while (!list_empty (&cond->waiters))
 		cond_signal (cond, lock);
+}
+
+bool
+cond_waiters_compare (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED) {
+	struct semaphore *a = &list_entry (a_, struct semaphore_elem, elem)->semaphore;
+	struct semaphore *b = &list_entry (b_, struct semaphore_elem, elem)->semaphore;
+	list_sort (&a->waiters, priority_compare, NULL);
+	list_sort (&b->waiters, priority_compare, NULL);
+	return list_entry (list_front (&a->waiters), struct thread, elem)->priority > list_entry (list_front (&b->waiters), struct thread, elem)->priority;
 }
