@@ -112,6 +112,8 @@ struct thread {
 	int original_priority; // 원래 priority
 	struct lock *lock; // 내가 기다리는 lock
 	struct list locks; // 내가 acquire한 lock
+	int nice;
+	int recent_cpu;
 };
 
 /* If false (default), use round-robin scheduler.
