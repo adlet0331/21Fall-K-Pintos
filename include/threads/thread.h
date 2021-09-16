@@ -108,13 +108,18 @@ struct thread {
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
 
-	int64_t time_to_run;                /* Wait until this time. */
+	int64_t time_to_run; // 실행 될 시간
+	int original_priority; // 원래 priority
+	struct lock *lock; // 내가 기다리는 lock
+	struct list locks; // 내가 acquire한 lock
 };
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+bool priority_compare (const struct list_elem *, const struct list_elem *, void *);
 
 void thread_init (void);
 void thread_start (void);
@@ -137,6 +142,8 @@ void thread_yield (void);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void thread_refresh_priority (struct thread *);
+void thread_donate_priority (struct thread *);
 
 int thread_get_nice (void);
 void thread_set_nice (int);

@@ -63,8 +63,6 @@ static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
 
-static bool priority_compare (const struct list_elem *, const struct list_elem *, void *);
-
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -245,7 +243,7 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	list_insert_ordered (&ready_list, &t->elem, priority_compare, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -308,7 +306,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered (&ready_list, &curr->elem, priority_compare, NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -318,7 +316,7 @@ void
 thread_set_priority (int new_priority) {
 	int prev_priority = thread_current ()->priority;
 	thread_current ()->priority = new_priority;
-	if (prev_priority > new_priority)
+	if (list_entry (list_front (&ready_list), struct thread, elem)->priority > new_priority)
 		thread_yield ();
 }
 
@@ -326,6 +324,36 @@ thread_set_priority (int new_priority) {
 int
 thread_get_priority (void) {
 	return thread_current ()->priority;
+}
+
+// 내가 가지고 있는 lock을 분석해서 priority의 최댓값을 설정
+void
+thread_refresh_priority (struct thread *t) {
+	ASSERT (is_thread (t));
+	if (list_empty (&t->locks)) return;
+	for (struct list_elem *i = list_front (&t->locks); i != list_end (&t->locks); i = list_next (i)) {
+		struct lock *lock = list_entry (i, struct lock, elem);
+		if (list_empty (&lock->semaphore.waiters)) continue;
+		for (struct list_elem *j = list_front (&lock->semaphore.waiters); j != list_end (&lock->semaphore.waiters); j = list_next (j)) {
+			struct thread *th = list_entry (j, struct thread, elem);
+			thread_refresh_priority (th);
+			if (t->priority < th->priority)
+				t->priority = th->priority;
+		}
+	}
+	struct thread *i = t;
+	while (i->lock != NULL && i->lock->holder != NULL) {
+		i->lock->holder->priority = i->priority;
+		i = i->lock->holder;
+	}
+}
+
+void
+thread_donate_priority (struct thread *to) {
+	struct thread *curr = thread_current ();
+	ASSERT (is_thread (to));
+	ASSERT (to->priority < thread_current ()->priority);
+	thread_refresh_priority (to);
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -428,9 +456,12 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
 	t->time_to_run = 0;
+	t->original_priority = priority;
+	t->lock = NULL;
+	list_init (&t->locks);
 }
 
-static bool
+bool
 priority_compare (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED) {
 	struct thread *a = list_entry (a_, struct thread, elem);
 	struct thread *b = list_entry (b_, struct thread, elem);
@@ -447,7 +478,7 @@ next_thread_to_run (void) {
 	if (list_empty (&ready_list))
 		return idle_thread;
 	else {
-		list_sort(&ready_list, priority_compare, NULL);
+		list_sort (&ready_list, priority_compare, NULL);
 		for (struct list_elem *e = list_front (&ready_list); e != list_end (&ready_list); e = list_next(e)) {
 			struct thread *t = list_entry (e, struct thread, elem);
 			int64_t current_time = timer_ticks();
