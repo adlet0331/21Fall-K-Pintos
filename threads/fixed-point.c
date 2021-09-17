@@ -9,7 +9,7 @@ int int_to_fp(int a){
     return a << 14;
 }
 int fp_to_int(int a){
-    return a << 14;
+    return a >> 14;
 }
 int fp_round_int(int a){
     if (a & (1 << 13)){
@@ -40,4 +40,10 @@ int fp_multiply_fp(int a, int b){
 }
 int fp_divide_fp(int a, int b){
     return ((int64_t) a) * F / b;
+}
+int int_divide_int(int a, int b){
+    int fp_a = int_to_fp(a);
+    int fp_b = int_to_fp(b);
+    int result = fp_divide_fp(fp_a, fp_b);
+    return fp_round_int(result);
 }

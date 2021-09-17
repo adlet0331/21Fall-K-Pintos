@@ -13,3 +13,4 @@ int fp_int_minus_fp(int, int);
 int int_fp_minus_fp(int, int);
 int fp_multiply_fp(int, int);
 int fp_divide_fp(int, int);
+int int_divide_int(int, int);
