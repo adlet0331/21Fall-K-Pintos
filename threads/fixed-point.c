@@ -36,14 +36,14 @@ int int_fp_minus_fp(int n, int b){
     return n * F - b;
 }
 int fp_multiply_fp(int a, int b){
-    return ((int64_t) a) * b / F;
+    return (((int64_t) a) * b) / F;
 }
 int fp_divide_fp(int a, int b){
-    return ((int64_t) a) * F / b;
+    return (((int64_t) a) * F) / b;
 }
 int int_divide_int(int a, int b){
     int fp_a = int_to_fp(a);
     int fp_b = int_to_fp(b);
-    int result = fp_divide_fp(fp_a, fp_b);
+    int result = fp_divide_fp(fp_a, fp_b) * F;
     return fp_round_int(result);
 }

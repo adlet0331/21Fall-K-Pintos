@@ -391,14 +391,19 @@ thread_get_nice (void) {
 }
 
 /* Returns 100 times the system load average. */
-int
-thread_get_load_avg (void) {
+int 
+thread_get_load_avg(void){
+	return global_load_avg;
+}
+
+void
+thread_update_load_avg (void) {
 	/* TODO: Your implementation goes here */
 	//int load_avg = (59/60) * load_avg + (1/60) * ready_threads;
 	enum intr_level old_level;
 	old_level = intr_disable ();
 	
-	int curr_load_avg = global_load_avg;
+	int curr_load_avg = thread_get_load_avg();
 	int ready_threads = list_size(&ready_list);
 	if(thread_current() != idle_thread){
 		ready_threads++;
@@ -406,8 +411,8 @@ thread_get_load_avg (void) {
 	int fp_59_60 = fp_divide_fp(int_to_fp(59), int_to_fp(60));
 	int fp_1_60 = fp_divide_fp(F, int_to_fp(60));
 
-	int a = fp_multiply_fp(fp_59_60, curr_load_avg);
-	int b = fp_multiply_fp(fp_1_60, ready_threads);
+	int a = fp_multiply_fp(fp_59_60, int_to_fp(curr_load_avg));
+	int b = fp_multiply_fp(fp_1_60, int_to_fp(ready_threads));
 	int result = fp_add_fp(a, b);
 	result = fp_multiply_fp(result, int_to_fp(100));
 	result = fp_round_int(result);
@@ -417,15 +422,14 @@ thread_get_load_avg (void) {
 	global_load_avg = result;
 	
 	intr_set_level (old_level);
-	return result;
+	return;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
-thread_get_recent_cpu () {
+thread_get_recent_cpu (struct thread *curr_thread) {
 	/* TODO: Your implementation goes here */
 	//recent_cpu = (2 * load_avg)/(2 * load_avg + 1) * recent_cpu + nice
-	struct thread *curr_thread = thread_current();
 	if(curr_thread == idle_thread){
 		return;
 	}
@@ -446,6 +450,26 @@ thread_get_recent_cpu () {
 
 	intr_set_level (old_level);
 	return result;
+}
+
+void
+thread_update_all_recent_cpu(struct thread *thr){
+	for(struct list_elem *thr_elem = list_begin(&all_list); thr_elem != list_end(&all_list); thr_elem = list_next(thr_elem)){
+		struct thread *t = list_entry(thr_elem, struct thread, all_elem);
+		t->recent_cpu = thread_get_recent_cpu(t);
+	}
+}
+
+void
+thread_increment_recent_cpu(){
+	struct thread *thr = thread_current();
+	enum intr_level old_level;
+	old_level = intr_disable ();
+
+	thr->recent_cpu++;
+	
+	intr_set_level(old_level);
+	return;
 }
 
 void
@@ -471,6 +495,7 @@ void
 update_all_priority(){
 	for(struct list_elem *thr_elem = list_begin(&all_list); thr_elem != list_end(&all_list); thr_elem = list_next(thr_elem)){
 		struct thread *t = list_entry(thr_elem, struct thread, all_elem);
+		update_priority(t);
 	}
 }
 

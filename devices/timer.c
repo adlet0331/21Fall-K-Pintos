@@ -137,7 +137,7 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 		}
 		if(ticks % TIMER_FREQ == 0){
 			// Refresh All threads : all_list
-			thread_get_load_avg();
+			thread_update_load_avg();
 		}
 	}
 }
