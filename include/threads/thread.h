@@ -112,6 +112,9 @@ struct thread {
 	int original_priority; // 원래 priority
 	struct lock *lock; // 내가 기다리는 lock
 	struct list locks; // 내가 acquire한 lock
+	int nice;
+	int recent_cpu;
+	struct list_elem all_elem;
 };
 
 /* If false (default), use round-robin scheduler.
@@ -147,8 +150,15 @@ void thread_donate_priority (struct thread *);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
-int thread_get_recent_cpu (void);
+
+int thread_get_load_avg(void);
 int thread_get_load_avg (void);
+
+void thread_update_recent_cpu (struct thread *);
+void thread_update_all_recent_cpu (void);
+void thread_increment_recent_cpu(void);
+
+void update_all_priority(void);
 
 int64_t thread_get_time_to_run(void);
 void thread_set_time_to_run(int64_t);
