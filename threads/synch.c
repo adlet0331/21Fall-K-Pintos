@@ -117,7 +117,7 @@ sema_up (struct semaphore *sema) {
 		thread_unblock (t);
 	}
 	sema->value++;
-	if (t != NULL && t->priority > thread_current ()->priority)
+	if (t != NULL && t->priority > thread_current ()->priority && !intr_context())
 		thread_yield ();
 	intr_set_level (old_level);
 }
@@ -261,8 +261,6 @@ lock_release (struct lock *lock) {
 	sema_up (&lock->semaphore);
 
 	intr_set_level(old_level);
-
-	thread_yield ();
 }
 
 /* Returns true if the current thread holds LOCK, false
