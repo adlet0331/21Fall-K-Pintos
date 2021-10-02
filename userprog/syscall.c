@@ -1,4 +1,5 @@
 #include "userprog/syscall.h"
+#include "lib/user/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
@@ -13,7 +14,18 @@ void syscall_handler (struct intr_frame *);
 
 void halt(void);
 void exit(int);
+pid_t fork(const char *);
+int exec(const char *);
+int wait(pid_t);
+bool create(const char *, unsigned);
+bool remove(const char *);
+int open(const char *);
+int filesize(int);
+int read(int, void *, unsigned);
 int write(int, const void *, unsigned);
+void seek(int, unsigned);
+unsigned tell(int);
+void close(int);
 
 /* System call.
  *
@@ -54,8 +66,41 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_EXIT:
 			exit(f->R.rdi);
 			break;
+		case SYS_FORK:
+			fork(f->R.rdi);
+			break;
+		case SYS_EXEC:
+			exec(f->R.rdi);
+			break;
+		case SYS_WAIT:
+			wait(f->R.rdi);
+			break;
+		case SYS_CREATE:
+			create(f->R.rdi, f->R.rsi);
+			break;
+		case SYS_REMOVE:
+			remove(f->R.rdi);
+			break;
+		case SYS_OPEN:
+			open(f->R.rdi);
+			break;
+		case SYS_FILESIZE:
+			filesize(f->R.rdi);
+			break;
+		case SYS_READ:
+			read(f->R.rdi, f->R.rsi, f->R.rdx);
+			break;
 		case SYS_WRITE:
 			write(f->R.rdi, f->R.rsi, f->R.rdx);
+			break;
+		case SYS_SEEK:
+			seek(f->R.rdi, f->R.rsi);
+			break;
+		case SYS_TELL:
+			tell(f->R.rdi);
+			break;
+		case SYS_CLOSE:
+			close(f->R.rdi);
 			break;
 		default:
 			thread_exit();
@@ -89,8 +134,63 @@ exit(int status) {
 	process_exit();
 }
 
+pid_t
+fork(const char *thread_name) {
+	thread_exit();
+}
+
+int
+exec(const char *cmd_line) {
+	thread_exit();
+}
+
+int
+wait(pid_t pid) {
+	thread_exit();
+}
+
+bool
+create(const char *file, unsigned initial_size) {
+	thread_exit();
+}
+
+bool
+remove(const char *file) {
+	thread_exit();
+}
+
+int
+open(const char *file) {
+	thread_exit();
+}
+
+int
+filesize(int fd) {
+	thread_exit();
+}
+
+int
+read(int fd, void *buffer, unsigned size) {
+	thread_exit();
+}
+
 int
 write(int fd, const void *buffer, unsigned size) {
 	if(fd == 1) putbuf(buffer, size);
 	else thread_exit();
+}
+
+void
+seek(int fd, unsigned position) {
+	thread_exit();
+}
+
+unsigned
+tell(int fd) {
+	thread_exit();
+}
+
+void
+close(int fd) {
+	thread_exit();
 }
