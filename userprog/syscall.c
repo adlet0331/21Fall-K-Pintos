@@ -9,8 +9,19 @@
 #include "threads/flags.h"
 #include "intrinsic.h"
 
+#include "filesys/filesys.h"
+#include "filesys/file.h"
+
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+
+bool
+invalid_pointer(void *ptr) {
+	if(ptr < 0x400000 || ptr > USER_STACK) return true;
+	uint64_t *pte = pml4e_walk(thread_current()->pml4, ptr, 0);
+	if(pte == NULL) return true;
+	return false;
+}
 
 /* System call.
  *
@@ -43,7 +54,6 @@ void
 syscall_handler (struct intr_frame *f) {
 	// TODO: Your implementation goes here.
 	uint64_t syscall_type = f->R.rax;
-	// printf("-- system call %llu\n", syscall_type);
 	switch(syscall_type){
 		case SYS_HALT:
 			halt();
@@ -67,7 +77,8 @@ syscall_handler (struct intr_frame *f) {
 			remove(f->R.rdi);
 			break;
 		case SYS_OPEN:
-			open(f->R.rdi);
+			if(invalid_pointer(f->R.rdi)) exit(-1);
+			else f->R.rax = open(f->R.rdi);
 			break;
 		case SYS_FILESIZE:
 			filesize(f->R.rdi);
@@ -92,21 +103,6 @@ syscall_handler (struct intr_frame *f) {
 	}
 }
 
-// SYS_HALT,                   /* Halt the operating system. */
-// SYS_EXIT,                   /* Terminate this process. */
-// SYS_FORK,                   /* Clone current process. */
-// SYS_EXEC,                   /* Switch current process. */
-// SYS_WAIT,                   /* Wait for a child process to die. */
-// SYS_CREATE,                 /* Create a file. */
-// SYS_REMOVE,                 /* Delete a file. */
-// SYS_OPEN,                   /* Open a file. */
-// SYS_FILESIZE,               /* Obtain a file's size. */
-// SYS_READ,                   /* Read from a file. */
-// SYS_WRITE,                  /* Write to a file. */
-// SYS_SEEK,                   /* Change position in a file. */
-// SYS_TELL,                   /* Report current position in a file. */
-// SYS_CLOSE,                  /* Close a file. */
-
 void
 halt(void) {
 	power_off();
@@ -116,7 +112,7 @@ void
 exit(int status) {
 	thread_current()->tf.R.rax = status;
 	printf("%s: exit(%d)\n", thread_current()->name, status);
-	process_exit();
+	thread_exit();
 }
 
 pid_t
@@ -146,7 +142,16 @@ remove(const char *file) {
 
 int
 open(const char *file) {
-	thread_exit();
+	struct thread *curr = thread_current();
+	struct file *f = filesys_open(file);
+	if(f == NULL) return -1;
+	for(int i = 2; i < 20; i++) {
+		if (curr->fd[i] == NULL) {
+			curr->fd[i] = f;
+			return i;
+		}
+	}
+	return -1;
 }
 
 int
@@ -161,8 +166,10 @@ read(int fd, void *buffer, unsigned size) {
 
 int
 write(int fd, const void *buffer, unsigned size) {
+	if(fd == 0) return 0;
 	if(fd == 1) putbuf(buffer, size);
 	else thread_exit();
+	return size;
 }
 
 void

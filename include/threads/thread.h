@@ -117,6 +117,7 @@ struct thread {
 	struct list_elem all_elem;
 	struct list child;
 	struct list_elem child_elem;
+	struct file *fd[20];
 };
 
 /* If false (default), use round-robin scheduler.
