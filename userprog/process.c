@@ -204,6 +204,7 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	while(1);
 	return -1;
 }
 
@@ -336,7 +337,11 @@ load (const char *file_name, struct intr_frame *if_) {
 	process_activate (thread_current ());
 
 	/* Open executable file. */
-	file = filesys_open (file_name);
+	char *file_argues_ptr;
+	char fn[20] = {};
+	for(int i = 0; file_name[i] != ' '; i++) fn[i] = file_name[i];
+
+	file = filesys_open (fn);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", file_name);
 		goto done;
@@ -416,6 +421,36 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	ASSERT(USER_STACK == if_->rsp);
+	int size;
+	int upper_words_size = 0;
+
+	char *token;
+	char *save_ptr;
+	char *stack_word_adress[50];
+	int argc = 0;
+	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
+		size = strlen(token) + 1;
+		upper_words_size += size;
+
+		strlcpy((char *)(if_->rsp - upper_words_size), token, size);
+		stack_word_adress[argc] = (char *)(if_->rsp - upper_words_size);
+		argc++;
+	}
+	int word_align = 8 * (upper_words_size/8 + 1);
+	for(int i = upper_words_size + 1; i <= word_align; i++){
+		*(char *)(if_->rsp - i) = 0;
+	}
+	*(char **)(if_->rsp - word_align - sizeof(char *)) = 0;
+	for(int i = argc - 1; i>=0; i--){
+		*(char **)(if_->rsp - word_align - (argc + 1 - i) * sizeof(char *)) = (char *)stack_word_adress[i];
+	}
+	int return_adress = if_->rsp - word_align - (argc + 2) * sizeof(char *);
+	*(uint64_t *)(return_adress) = 0;
+
+	if_->R.rdi = argc;
+	if_->R.rsi = return_adress + 8;
+	if_->rsp = return_adress;
 
 	success = true;
 
