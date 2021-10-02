@@ -71,9 +71,8 @@ syscall_handler (struct intr_frame *f) {
 			wait(f->R.rdi);
 			break;
 		case SYS_CREATE:
-			if(invalid_pointer(f->R.rdi)) 
-				exit(-1);
-			f->R.rax = create(f->R.rdi, f->R.rsi);
+			if(invalid_pointer(f->R.rdi)) exit(-1);
+			else f->R.rax = create(f->R.rdi, f->R.rsi);
 			break;
 		case SYS_REMOVE:
 			remove(f->R.rdi);
@@ -83,13 +82,15 @@ syscall_handler (struct intr_frame *f) {
 			else f->R.rax = open(f->R.rdi);
 			break;
 		case SYS_FILESIZE:
-			filesize(f->R.rdi);
+			f->R.rax = filesize(f->R.rdi);
 			break;
 		case SYS_READ:
-			read(f->R.rdi, f->R.rsi, f->R.rdx);
+			if(invalid_pointer(f->R.rsi)) exit(-1);
+			else f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
 			break;
 		case SYS_WRITE:
-			write(f->R.rdi, f->R.rsi, f->R.rdx);
+			if(invalid_pointer(f->R.rsi)) exit(-1);
+			else f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
 			break;
 		case SYS_SEEK:
 			seek(f->R.rdi, f->R.rsi);
@@ -163,20 +164,33 @@ open(const char *file) {
 
 int
 filesize(int fd) {
-	thread_exit();
+	if(fd >= 20 || fd < 0) return 0;
+	struct thread *curr = thread_current();
+	struct file *f = curr->fd[fd];
+	if(f == NULL) return 0;
+	return file_length(f);
 }
 
 int
 read(int fd, void *buffer, unsigned size) {
-	thread_exit();
+	if(fd == 1 || fd >= 20 || fd < 0) return 0;
+	struct thread *curr = thread_current();
+	struct file *f = curr->fd[fd];
+	if(f == NULL) return -1;
+	return file_read(f, buffer, size);
 }
 
 int
 write(int fd, const void *buffer, unsigned size) {
-	if(fd == 0) return 0;
-	if(fd == 1) putbuf(buffer, size);
-	else thread_exit();
-	return size;
+	if(fd >= 20 || fd <= 0) return 0;
+	if(fd == 1) {
+		putbuf(buffer, size);
+		return size;
+	}
+	struct thread *curr = thread_current();
+	struct file *f = curr->fd[fd];
+	if(f == NULL) return -1;
+	return file_write(f, buffer, size);
 }
 
 void
@@ -191,5 +205,10 @@ tell(int fd) {
 
 void
 close(int fd) {
-	thread_exit();
+	if(fd >= 20 || fd < 0) return;
+	struct thread *curr = thread_current();
+	struct file *f = curr->fd[fd];
+	if(f == NULL) return;
+	curr->fd[fd] = NULL;
+	file_close(f);
 }
