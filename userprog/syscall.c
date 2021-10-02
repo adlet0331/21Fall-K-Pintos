@@ -75,7 +75,8 @@ syscall_handler (struct intr_frame *f) {
 			else f->R.rax = create(f->R.rdi, f->R.rsi);
 			break;
 		case SYS_REMOVE:
-			remove(f->R.rdi);
+			if(invalid_pointer(f->R.rdi)) exit(-1);
+			else f->R.rax = remove(f->R.rdi);
 			break;
 		case SYS_OPEN:
 			if(invalid_pointer(f->R.rdi)) exit(-1);
@@ -145,7 +146,7 @@ create(const char *file, unsigned initial_size) {
 
 bool
 remove(const char *file) {
-	thread_exit();
+	return filesys_remove(file);
 }
 
 int
