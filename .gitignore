@@ -1,3 +1,4 @@
 .vscode/
 threads/build/
 userprog/build/
+utils/pincheck

@@ -71,7 +71,9 @@ syscall_handler (struct intr_frame *f) {
 			wait(f->R.rdi);
 			break;
 		case SYS_CREATE:
-			create(f->R.rdi, f->R.rsi);
+			if(invalid_pointer(f->R.rdi)) 
+				exit(-1);
+			f->R.rax = create(f->R.rdi, f->R.rsi);
 			break;
 		case SYS_REMOVE:
 			remove(f->R.rdi);
@@ -122,7 +124,10 @@ fork(const char *thread_name) {
 
 int
 exec(const char *cmd_line) {
-	thread_exit();
+	char fn[20] = {};
+	for(int i = 0; cmd_line[i] != ' ' && cmd_line[i] != '\0'; i++) fn[i] = cmd_line[i];
+	
+	return process_exec(fn);
 }
 
 int
@@ -132,7 +137,9 @@ wait(pid_t pid) {
 
 bool
 create(const char *file, unsigned initial_size) {
-	thread_exit();
+	if (strlen(file) == 0)
+		return false;
+	return filesys_create (file, initial_size);
 }
 
 bool
