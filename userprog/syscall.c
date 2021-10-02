@@ -85,6 +85,7 @@ halt(void) {
 void
 exit(int status) {
 	thread_current()->tf.R.rax = status;
+	printf("%s: exit(%d)\n", thread_current()->name, status);
 	process_exit();
 }
 

@@ -600,11 +600,14 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->original_priority = priority;
 	t->lock = NULL;
 	list_init (&t->locks);
+	list_init (&t->child);
 	if(thread_mlfqs){
 		t->nice = 0;
 		t->recent_cpu = 0;
 	}
 	list_push_back(&all_list, &t->all_elem);
+	if(running_thread()->status == THREAD_RUNNING)
+		list_push_back(&thread_current()->child, &t->child_elem);
 }
 
 bool
@@ -782,6 +785,8 @@ schedule (void) {
 			ASSERT (curr != next);
 			list_push_back (&destruction_req, &curr->elem);
 			list_remove (&curr->all_elem);
+			if(curr->child_elem.prev != NULL && curr->child_elem.next != NULL)
+				list_remove(&curr->child_elem);
 		}
 
 		/* Before switching the thread, we first save the information

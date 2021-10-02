@@ -51,7 +51,9 @@ process_create_initd (const char *file_name) {
 	strlcpy (fn_copy, file_name, PGSIZE);
 
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
+	char fn[20] = {};
+	for(int i = 0; file_name[i] != ' ' && file_name[i] != '\0'; i++) fn[i] = file_name[i];
+	tid = thread_create (fn, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
@@ -204,8 +206,27 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	while(1);
-	return -1;
+	struct thread *child = NULL;
+	for(struct list_elem *e = list_begin(&thread_current()->child); e != list_end(&thread_current()->child); e = list_next(e)){
+		struct thread *t = list_entry(e, struct thread, child_elem);
+		if (t->tid == child_tid){
+			child = t;
+			break;
+		}
+	}
+	if(child == NULL)
+		return -1;
+	while(1){
+		child = NULL;
+		for(struct list_elem *e = list_begin(&thread_current()->child); e != list_end(&thread_current()->child); e = list_next(e)){
+			struct thread *t = list_entry(e, struct thread, child_elem);
+			if (t->tid == child_tid){
+				child = t;
+				break;
+			}
+		}
+		if(child == NULL) return 0;
+	}
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -339,11 +360,11 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Open executable file. */
 	char *file_argues_ptr;
 	char fn[20] = {};
-	for(int i = 0; file_name[i] != ' '; i++) fn[i] = file_name[i];
+	for(int i = 0; file_name[i] != ' ' && file_name[i] != '\0'; i++) fn[i] = file_name[i];
 
 	file = filesys_open (fn);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name);
+		printf ("load: %s: open failed\n", fn);
 		goto done;
 	}
 
@@ -355,7 +376,7 @@ load (const char *file_name, struct intr_frame *if_) {
 			|| ehdr.e_version != 1
 			|| ehdr.e_phentsize != sizeof (struct Phdr)
 			|| ehdr.e_phnum > 1024) {
-		printf ("load: %s: error loading executable\n", file_name);
+		printf ("load: %s: error loading executable\n", fn);
 		goto done;
 	}
 
