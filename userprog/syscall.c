@@ -11,6 +11,10 @@
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
+void halt(void);
+void exit(int);
+int write(int, const void *, unsigned);
+
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -39,8 +43,53 @@ syscall_init (void) {
 
 /* The main system call interface */
 void
-syscall_handler (struct intr_frame *f UNUSED) {
+syscall_handler (struct intr_frame *f) {
 	// TODO: Your implementation goes here.
-	printf ("system call!\n");
-	thread_exit ();
+	uint64_t syscall_type = f->R.rax;
+	// printf("-- system call %llu\n", syscall_type);
+	switch(syscall_type){
+		case SYS_HALT:
+			halt();
+			break;
+		case SYS_EXIT:
+			exit(f->R.rdi);
+			break;
+		case SYS_WRITE:
+			write(f->R.rdi, f->R.rsi, f->R.rdx);
+			break;
+		default:
+			thread_exit();
+	}
+}
+
+// SYS_HALT,                   /* Halt the operating system. */
+// SYS_EXIT,                   /* Terminate this process. */
+// SYS_FORK,                   /* Clone current process. */
+// SYS_EXEC,                   /* Switch current process. */
+// SYS_WAIT,                   /* Wait for a child process to die. */
+// SYS_CREATE,                 /* Create a file. */
+// SYS_REMOVE,                 /* Delete a file. */
+// SYS_OPEN,                   /* Open a file. */
+// SYS_FILESIZE,               /* Obtain a file's size. */
+// SYS_READ,                   /* Read from a file. */
+// SYS_WRITE,                  /* Write to a file. */
+// SYS_SEEK,                   /* Change position in a file. */
+// SYS_TELL,                   /* Report current position in a file. */
+// SYS_CLOSE,                  /* Close a file. */
+
+void
+halt(void) {
+	power_off();
+}
+
+void
+exit(int status) {
+	thread_current()->tf.R.rax = status;
+	process_exit();
+}
+
+int
+write(int fd, const void *buffer, unsigned size) {
+	if(fd == 1) putbuf(buffer, size);
+	else thread_exit();
 }
