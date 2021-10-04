@@ -9,6 +9,7 @@
 #include "threads/flags.h"
 #include "intrinsic.h"
 #include "threads/synch.h"
+#include "threads/palloc.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 
@@ -71,6 +72,7 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_EXEC:
 			if(invalid_pointer(f->R.rdi)) exit(-1);
 			else f->R.rax = exec(f->R.rdi);
+			exit(-1);
 			break;
 		case SYS_WAIT:
 			wait(f->R.rdi);
@@ -131,8 +133,10 @@ fork(const char *thread_name) {
 
 int
 exec(const char *cmd_line) {
-	char fn[20] = {};
-	for(int i = 0; cmd_line[i] != ' ' && cmd_line[i] != '\0'; i++) fn[i] = cmd_line[i];
+	char *fn = palloc_get_page(0);
+	int i;
+	for(i = 0; cmd_line[i] != '\0'; i++) fn[i] = cmd_line[i];
+	fn[i] = 0;
 	
 	return process_exec(fn);
 }
