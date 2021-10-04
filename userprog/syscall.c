@@ -8,9 +8,11 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
-
+#include "threads/synch.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+
+struct lock file_lock;
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -47,6 +49,8 @@ syscall_init (void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+	
+	lock_init(&file_lock);
 }
 
 /* The main system call interface */
@@ -65,7 +69,8 @@ syscall_handler (struct intr_frame *f) {
 			fork(f->R.rdi);
 			break;
 		case SYS_EXEC:
-			exec(f->R.rdi);
+			if(invalid_pointer(f->R.rdi)) exit(-1);
+			else f->R.rax = exec(f->R.rdi);
 			break;
 		case SYS_WAIT:
 			wait(f->R.rdi);
@@ -97,7 +102,7 @@ syscall_handler (struct intr_frame *f) {
 			seek(f->R.rdi, f->R.rsi);
 			break;
 		case SYS_TELL:
-			tell(f->R.rdi);
+			f->R.rax = tell(f->R.rdi);
 			break;
 		case SYS_CLOSE:
 			close(f->R.rdi);
@@ -141,25 +146,37 @@ bool
 create(const char *file, unsigned initial_size) {
 	if (strlen(file) == 0)
 		return false;
-	return filesys_create (file, initial_size);
+	lock_acquire(&file_lock);
+	bool result = filesys_create (file, initial_size);
+	lock_release(&file_lock);
+	return result;
 }
 
 bool
 remove(const char *file) {
-	return filesys_remove(file);
+	lock_acquire(&file_lock);
+	bool result = filesys_remove(file);
+	lock_release(&file_lock);
+	return result;
 }
 
 int
 open(const char *file) {
 	struct thread *curr = thread_current();
+	lock_acquire(&file_lock);
 	struct file *f = filesys_open(file);
-	if(f == NULL) return -1;
+	if(f == NULL) {
+		lock_release(&file_lock);
+		return -1;
+	}
 	for(int i = 2; i < 20; i++) {
 		if (curr->fd[i] == NULL) {
 			curr->fd[i] = f;
+			lock_release(&file_lock);
 			return i;
 		}
 	}
+	lock_release(&file_lock);
 	return -1;
 }
 
@@ -169,7 +186,10 @@ filesize(int fd) {
 	struct thread *curr = thread_current();
 	struct file *f = curr->fd[fd];
 	if(f == NULL) return 0;
-	return file_length(f);
+	lock_acquire(&file_lock);
+	int result = file_length(f);
+	lock_release(&file_lock);
+	return result;
 }
 
 int
@@ -178,30 +198,53 @@ read(int fd, void *buffer, unsigned size) {
 	struct thread *curr = thread_current();
 	struct file *f = curr->fd[fd];
 	if(f == NULL) return -1;
-	return file_read(f, buffer, size);
+	lock_acquire(&file_lock);
+	int result = file_read(f, buffer, size);
+	lock_release(&file_lock);
+	return result;
 }
 
 int
 write(int fd, const void *buffer, unsigned size) {
 	if(fd >= 20 || fd <= 0) return 0;
+	lock_acquire(&file_lock);
 	if(fd == 1) {
 		putbuf(buffer, size);
+		lock_release(&file_lock);
 		return size;
 	}
 	struct thread *curr = thread_current();
 	struct file *f = curr->fd[fd];
-	if(f == NULL) return -1;
-	return file_write(f, buffer, size);
+	if(f == NULL) {
+		lock_release(&file_lock);
+		return -1;
+	}
+	int result = file_write(f, buffer, size);
+	lock_release(&file_lock);
+	return result;
 }
 
 void
 seek(int fd, unsigned position) {
-	thread_exit();
+	if(fd >= 20 || fd < 0) return 0;
+	struct thread *curr = thread_current();
+	struct file *f = curr->fd[fd];
+	if(f == NULL) return;
+	lock_acquire(&file_lock);
+	file_seek(f, position);
+	lock_release(&file_lock);
 }
 
 unsigned
 tell(int fd) {
-	thread_exit();
+	if(fd >= 20 || fd < 0) return 0;
+	struct thread *curr = thread_current();
+	struct file *f = curr->fd[fd];
+	if(f == NULL) return;
+	lock_acquire(&file_lock);
+	unsigned result = file_tell(f);
+	lock_release(&file_lock);
+	return result;
 }
 
 void
@@ -211,5 +254,7 @@ close(int fd) {
 	struct file *f = curr->fd[fd];
 	if(f == NULL) return;
 	curr->fd[fd] = NULL;
+	lock_acquire(&file_lock);
 	file_close(f);
+	lock_release(&file_lock);
 }
