@@ -76,10 +76,13 @@ initd (void *f_name) {
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t
-process_fork (const char *name, struct intr_frame *if_ UNUSED) {
+process_fork (const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
-	return thread_create (name,
-			PRI_DEFAULT, __do_fork, thread_current ());
+	enum intr_level old_level = intr_disable();
+	tid_t result = thread_create (name,
+			PRI_DEFAULT, __do_fork, if_);
+	intr_set_level(old_level);
+	return result;
 }
 
 #ifndef VM
@@ -94,16 +97,22 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
+	if(is_kern_pte(pte)) {
+		return true;
+	}
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page (parent->pml4, va);
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
+	newpage = palloc_get_page(0);
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
+	memcpy(newpage, parent_page, PGSIZE);
+	writable = is_writable((uint64_t *)pte);
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
@@ -121,10 +130,10 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 static void
 __do_fork (void *aux) {
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *) aux;
+	struct thread *parent = thread_current()->parent;
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if;
+	struct intr_frame *parent_if = (struct intr_frame *)aux;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
@@ -150,8 +159,14 @@ __do_fork (void *aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+	for(int i=0; i<128; i++) {
+		if(parent->fd[i] != NULL)
+			current->fd[i] = file_duplicate(parent->fd[i]);
+	}
+	// if_.R.rax = 0;
 
 	process_init ();
+	printf("__do_fork finish\n");
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
@@ -202,12 +217,15 @@ process_exec (void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) {
+process_wait (tid_t child_tid) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	struct thread *curr = thread_current();
 	struct thread *child = NULL;
-	for(struct list_elem *e = list_begin(&thread_current()->child); e != list_end(&thread_current()->child); e = list_next(e)){
+	enum intr_level old_level;
+
+	for(struct list_elem *e = list_begin(&curr->child); e != list_end(&curr->child); e = list_next(e)){
 		struct thread *t = list_entry(e, struct thread, child_elem);
 		if (t->tid == child_tid){
 			child = t;
@@ -216,17 +234,11 @@ process_wait (tid_t child_tid UNUSED) {
 	}
 	if(child == NULL)
 		return -1;
-	while(1){
-		child = NULL;
-		for(struct list_elem *e = list_begin(&thread_current()->child); e != list_end(&thread_current()->child); e = list_next(e)){
-			struct thread *t = list_entry(e, struct thread, child_elem);
-			if (t->tid == child_tid){
-				child = t;
-				break;
-			}
-		}
-		if(child == NULL) return 0;
-	}
+
+	old_level = intr_disable();
+	thread_block();
+	intr_set_level(old_level);
+	return curr->status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -448,14 +460,14 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	char *token;
 	char *save_ptr;
-	char *stack_word_adress[50];
+	char *stack_word_address[50];
 	int argc = 0;
 	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
 		size = strlen(token) + 1;
 		upper_words_size += size;
 
 		strlcpy((char *)(if_->rsp - upper_words_size), token, size);
-		stack_word_adress[argc] = (char *)(if_->rsp - upper_words_size);
+		stack_word_address[argc] = (char *)(if_->rsp - upper_words_size);
 		argc++;
 	}
 	int word_align = 8 * (upper_words_size/8 + 1);
@@ -464,14 +476,14 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 	*(char **)(if_->rsp - word_align - sizeof(char *)) = 0;
 	for(int i = argc - 1; i>=0; i--){
-		*(char **)(if_->rsp - word_align - (argc + 1 - i) * sizeof(char *)) = (char *)stack_word_adress[i];
+		*(char **)(if_->rsp - word_align - (argc + 1 - i) * sizeof(char *)) = (char *)stack_word_address[i];
 	}
-	int return_adress = if_->rsp - word_align - (argc + 2) * sizeof(char *);
-	*(uint64_t *)(return_adress) = 0;
+	int return_address = if_->rsp - word_align - (argc + 2) * sizeof(char *);
+	*(uint64_t *)(return_address) = 0;
 
 	if_->R.rdi = argc;
-	if_->R.rsi = return_adress + 8;
-	if_->rsp = return_adress;
+	if_->R.rsi = return_address + 8;
+	if_->rsp = return_address;
 
 	success = true;
 

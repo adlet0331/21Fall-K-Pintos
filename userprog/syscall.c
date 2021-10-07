@@ -67,7 +67,11 @@ syscall_handler (struct intr_frame *f) {
 			exit(f->R.rdi);
 			break;
 		case SYS_FORK:
-			fork(f->R.rdi);
+			if(invalid_pointer(f->R.rdi)) exit(-1);
+			else {
+				thread_current()->fork_frame = f;
+				f->R.rax = fork(f->R.rdi);
+			}
 			break;
 		case SYS_EXEC:
 			if(invalid_pointer(f->R.rdi)) exit(-1);
@@ -75,7 +79,7 @@ syscall_handler (struct intr_frame *f) {
 			exit(-1);
 			break;
 		case SYS_WAIT:
-			wait(f->R.rdi);
+			f->R.rax = wait(f->R.rdi);
 			break;
 		case SYS_CREATE:
 			if(invalid_pointer(f->R.rdi)) exit(-1);
@@ -121,14 +125,21 @@ halt(void) {
 
 void
 exit(int status) {
-	thread_current()->tf.R.rax = status;
-	printf("%s: exit(%d)\n", thread_current()->name, status);
+	struct thread *curr = thread_current();
+	curr->tf.R.rax = status;
+	printf("%s: exit(%d)\n", curr->name, status);
+	if(curr->parent != NULL) {
+		curr->parent->child_state = status;
+		thread_unblock(curr->parent);
+	}
 	thread_exit();
 }
 
 pid_t
 fork(const char *thread_name) {
-	thread_exit();
+	struct thread *curr = thread_current();
+	pid_t result = process_fork(thread_name, &curr->fork_frame);
+	return result;
 }
 
 int
@@ -143,7 +154,7 @@ exec(const char *cmd_line) {
 
 int
 wait(pid_t pid) {
-	thread_exit();
+	return process_wait(pid);
 }
 
 bool

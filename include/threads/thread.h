@@ -117,7 +117,10 @@ struct thread {
 	struct list_elem all_elem;
 	struct list child;
 	struct list_elem child_elem;
-	struct file *fd[20];
+	struct thread *parent;
+	int child_state;
+	struct file *fd[130];
+	struct intr_frame *fork_frame;
 };
 
 /* If false (default), use round-robin scheduler.

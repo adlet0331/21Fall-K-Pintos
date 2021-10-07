@@ -606,8 +606,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 		t->recent_cpu = 0;
 	}
 	list_push_back(&all_list, &t->all_elem);
-	if(running_thread()->status == THREAD_RUNNING)
+	t->parent = NULL;
+	if(running_thread()->status == THREAD_RUNNING) {
 		list_push_back(&thread_current()->child, &t->child_elem);
+		t->parent = thread_current();
+	}
 }
 
 bool
