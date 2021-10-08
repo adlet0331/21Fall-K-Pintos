@@ -133,6 +133,10 @@ exit(int status) {
 		sema_up(&curr->child_struct->wait_sema);
 	}
 	lock_acquire(&file_lock);
+	for(int i=2; i<128; i++){
+		struct file *f = curr->fd[i];
+		if(f != NULL) file_close(f);
+	}
 	file_close(curr->load_file);
 	lock_release(&file_lock);
 	thread_exit();
@@ -147,7 +151,6 @@ fork(const char *thread_name) {
 
 int
 exec(const char *cmd_line) {
-	// char *fn = pg_round_down(pml4_get_page(thread_current()->pml4, cmd_line));
 	char *fn = palloc_get_page(PAL_USER);
 	int i;
 	for(i = 0; cmd_line[i] != '\0'; i++) fn[i] = cmd_line[i];
