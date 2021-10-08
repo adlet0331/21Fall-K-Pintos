@@ -8,7 +8,7 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
-
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status {
@@ -115,12 +115,14 @@ struct thread {
 	int nice;
 	int recent_cpu;
 	struct list_elem all_elem;
-	struct list child;
+	struct list child_list;
 	struct list_elem child_elem;
 	struct thread *parent;
 	int child_state;
 	struct file *fd[130];
 	struct intr_frame *fork_frame;
+	struct semaphore fork_sema;
+	struct semaphore wait_sema;
 };
 
 /* If false (default), use round-robin scheduler.

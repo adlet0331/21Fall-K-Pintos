@@ -21,6 +21,9 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
+#include "threads/synch.h"
+
+#include "lib/stdio.h"
 
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
@@ -81,6 +84,7 @@ process_fork (const char *name, struct intr_frame *if_) {
 	enum intr_level old_level = intr_disable();
 	tid_t result = thread_create (name,
 			PRI_DEFAULT, __do_fork, if_);
+	sema_down(&thread_current()->fork_sema);
 	intr_set_level(old_level);
 	return result;
 }
@@ -106,7 +110,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
-	newpage = palloc_get_page(0);
+	newpage = palloc_get_page(PAL_USER);
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
@@ -118,7 +122,9 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: if fail to insert page, do error handling. */
+		printf("asdfasdfasdfasd\n");
 	}
+
 	return true;
 }
 #endif
@@ -135,6 +141,8 @@ __do_fork (void *aux) {
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if = (struct intr_frame *)aux;
 	bool succ = true;
+
+	enum intr_level old_level = intr_disable();
 
 	/* 1. Read the cpu context to local stack. */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
@@ -163,15 +171,19 @@ __do_fork (void *aux) {
 		if(parent->fd[i] != NULL)
 			current->fd[i] = file_duplicate(parent->fd[i]);
 	}
-	// if_.R.rax = 0;
+	if_.R.rax = 0;
 
 	process_init ();
-	printf("__do_fork finish\n");
 
 	/* Finally, switch to the newly created process. */
-	if (succ)
+	if (succ) {
+		sema_up(&parent->fork_sema);
+		intr_set_level(old_level);
 		do_iret (&if_);
+	}
 error:
+	sema_up(&parent->fork_sema);
+	intr_set_level(old_level);
 	thread_exit ();
 }
 
@@ -225,7 +237,7 @@ process_wait (tid_t child_tid) {
 	struct thread *child = NULL;
 	enum intr_level old_level;
 
-	for(struct list_elem *e = list_begin(&curr->child); e != list_end(&curr->child); e = list_next(e)){
+	for(struct list_elem *e = list_begin(&curr->child_list); e != list_end(&curr->child_list); e = list_next(e)){
 		struct thread *t = list_entry(e, struct thread, child_elem);
 		if (t->tid == child_tid){
 			child = t;
@@ -235,10 +247,9 @@ process_wait (tid_t child_tid) {
 	if(child == NULL)
 		return -1;
 
-	old_level = intr_disable();
-	thread_block();
-	intr_set_level(old_level);
-	return curr->status;
+	sema_down(&child->wait_sema);
+	list_remove(&child->child_elem);
+	return curr->child_state;
 }
 
 /* Exit the process. This function is called by thread_exit (). */

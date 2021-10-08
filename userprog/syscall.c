@@ -130,7 +130,7 @@ exit(int status) {
 	printf("%s: exit(%d)\n", curr->name, status);
 	if(curr->parent != NULL) {
 		curr->parent->child_state = status;
-		thread_unblock(curr->parent);
+		sema_up(&curr->wait_sema);
 	}
 	thread_exit();
 }
@@ -138,7 +138,7 @@ exit(int status) {
 pid_t
 fork(const char *thread_name) {
 	struct thread *curr = thread_current();
-	pid_t result = process_fork(thread_name, &curr->fork_frame);
+	pid_t result = process_fork(thread_name, curr->fork_frame);
 	return result;
 }
 
@@ -184,7 +184,7 @@ open(const char *file) {
 		lock_release(&file_lock);
 		return -1;
 	}
-	for(int i = 2; i < 20; i++) {
+	for(int i = 2; i < 128; i++) {
 		if (curr->fd[i] == NULL) {
 			curr->fd[i] = f;
 			lock_release(&file_lock);
@@ -197,7 +197,7 @@ open(const char *file) {
 
 int
 filesize(int fd) {
-	if(fd >= 20 || fd < 0) return 0;
+	if(fd >= 128 || fd < 0) return 0;
 	struct thread *curr = thread_current();
 	struct file *f = curr->fd[fd];
 	if(f == NULL) return 0;
@@ -209,7 +209,7 @@ filesize(int fd) {
 
 int
 read(int fd, void *buffer, unsigned size) {
-	if(fd == 1 || fd >= 20 || fd < 0) return 0;
+	if(fd == 1 || fd >= 128 || fd < 0) return 0;
 	struct thread *curr = thread_current();
 	struct file *f = curr->fd[fd];
 	if(f == NULL) return -1;
@@ -221,7 +221,7 @@ read(int fd, void *buffer, unsigned size) {
 
 int
 write(int fd, const void *buffer, unsigned size) {
-	if(fd >= 20 || fd <= 0) return 0;
+	if(fd >= 128 || fd <= 0) return 0;
 	lock_acquire(&file_lock);
 	if(fd == 1) {
 		putbuf(buffer, size);
@@ -241,7 +241,7 @@ write(int fd, const void *buffer, unsigned size) {
 
 void
 seek(int fd, unsigned position) {
-	if(fd >= 20 || fd < 0) return 0;
+	if(fd >= 128 || fd < 0) return 0;
 	struct thread *curr = thread_current();
 	struct file *f = curr->fd[fd];
 	if(f == NULL) return;
@@ -252,7 +252,7 @@ seek(int fd, unsigned position) {
 
 unsigned
 tell(int fd) {
-	if(fd >= 20 || fd < 0) return 0;
+	if(fd >= 128 || fd < 0) return 0;
 	struct thread *curr = thread_current();
 	struct file *f = curr->fd[fd];
 	if(f == NULL) return;
@@ -264,7 +264,7 @@ tell(int fd) {
 
 void
 close(int fd) {
-	if(fd >= 20 || fd < 0) return;
+	if(fd >= 128 || fd < 0) return;
 	struct thread *curr = thread_current();
 	struct file *f = curr->fd[fd];
 	if(f == NULL) return;
