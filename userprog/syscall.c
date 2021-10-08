@@ -147,6 +147,7 @@ fork(const char *thread_name) {
 
 int
 exec(const char *cmd_line) {
+	// char *fn = pg_round_down(pml4_get_page(thread_current()->pml4, cmd_line));
 	char *fn = palloc_get_page(PAL_USER);
 	int i;
 	for(i = 0; cmd_line[i] != '\0'; i++) fn[i] = cmd_line[i];

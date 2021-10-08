@@ -25,6 +25,9 @@
 
 extern struct lock file_lock;
 
+// fork 에러 핸들링
+bool fork_success;
+
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
@@ -84,8 +87,10 @@ process_fork (const char *name, struct intr_frame *if_) {
 	enum intr_level old_level = intr_disable();
 	tid_t result = thread_create (name,
 			PRI_DEFAULT, __do_fork, if_);
+	if(result == TID_ERROR) return TID_ERROR;
 	sema_down(&thread_current()->fork_sema);
 	intr_set_level(old_level);
+	if(!fork_success) return TID_ERROR;
 	return result;
 }
 
@@ -122,6 +127,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: if fail to insert page, do error handling. */
+		palloc_free_page(newpage);
 		return false;
 	}
 
@@ -180,11 +186,13 @@ __do_fork (void *aux) {
 
 	/* Finally, switch to the newly created process. */
 	if (succ) {
+		fork_success = true;
 		sema_up(&parent->fork_sema);
 		intr_set_level(old_level);
 		do_iret (&if_);
 	}
 error:
+	fork_success = false;
 	sema_up(&parent->fork_sema);
 	intr_set_level(old_level);
 	thread_exit ();
@@ -254,7 +262,9 @@ process_wait (tid_t child_tid) {
 
 	sema_down(&child->wait_sema);
 	list_remove(&child->elem);
-	return child->exit_status;
+	int result = child->exit_status;
+	free(child);
+	return result;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
