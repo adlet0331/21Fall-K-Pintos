@@ -123,6 +123,7 @@ struct thread {
 	struct intr_frame *fork_frame;
 	struct semaphore fork_sema;
 	struct semaphore wait_sema;
+	struct file *load_file;
 };
 
 /* If false (default), use round-robin scheduler.

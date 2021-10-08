@@ -132,6 +132,7 @@ exit(int status) {
 		curr->parent->child_state = status;
 		sema_up(&curr->wait_sema);
 	}
+	file_close(curr->load_file);
 	thread_exit();
 }
 
@@ -144,7 +145,7 @@ fork(const char *thread_name) {
 
 int
 exec(const char *cmd_line) {
-	char *fn = palloc_get_page(0);
+	char *fn = palloc_get_page(PAL_USER);
 	int i;
 	for(i = 0; cmd_line[i] != '\0'; i++) fn[i] = cmd_line[i];
 	fn[i] = 0;

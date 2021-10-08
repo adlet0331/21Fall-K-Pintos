@@ -122,7 +122,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: if fail to insert page, do error handling. */
-		printf("asdfasdfasdfasd\n");
+		return false;
 	}
 
 	return true;
@@ -500,7 +500,10 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+	if(success) {
+		file_deny_write(file);
+		thread_current()->load_file = file;
+	}
 	return success;
 }
 
