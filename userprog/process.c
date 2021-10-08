@@ -23,7 +23,7 @@
 #endif
 #include "threads/synch.h"
 
-#include "lib/stdio.h"
+extern struct lock file_lock;
 
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
@@ -168,8 +168,11 @@ __do_fork (void *aux) {
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
 	for(int i=0; i<128; i++) {
-		if(parent->fd[i] != NULL)
+		if(parent->fd[i] != NULL) {
+			lock_acquire(&file_lock);
 			current->fd[i] = file_duplicate(parent->fd[i]);
+			lock_release(&file_lock);
+		}
 	}
 	if_.R.rax = 0;
 
@@ -206,7 +209,9 @@ process_exec (void *f_name) {
 	process_cleanup ();
 
 	/* And then load the binary */
+	lock_acquire(&file_lock);
 	success = load (file_name, &_if);
+	lock_release(&file_lock);
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
@@ -234,11 +239,11 @@ process_wait (tid_t child_tid) {
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
 	struct thread *curr = thread_current();
-	struct thread *child = NULL;
+	struct child_process *child = NULL;
 	enum intr_level old_level;
 
 	for(struct list_elem *e = list_begin(&curr->child_list); e != list_end(&curr->child_list); e = list_next(e)){
-		struct thread *t = list_entry(e, struct thread, child_elem);
+		struct child_process *t = list_entry(e, struct child_process, elem);
 		if (t->tid == child_tid){
 			child = t;
 			break;
@@ -248,8 +253,8 @@ process_wait (tid_t child_tid) {
 		return -1;
 
 	sema_down(&child->wait_sema);
-	list_remove(&child->child_elem);
-	return curr->child_state;
+	list_remove(&child->elem);
+	return child->exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */

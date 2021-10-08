@@ -129,10 +129,12 @@ exit(int status) {
 	curr->tf.R.rax = status;
 	printf("%s: exit(%d)\n", curr->name, status);
 	if(curr->parent != NULL) {
-		curr->parent->child_state = status;
-		sema_up(&curr->wait_sema);
+		curr->child_struct->exit_status = status;
+		sema_up(&curr->child_struct->wait_sema);
 	}
+	lock_acquire(&file_lock);
 	file_close(curr->load_file);
+	lock_release(&file_lock);
 	thread_exit();
 }
 
@@ -223,18 +225,16 @@ read(int fd, void *buffer, unsigned size) {
 int
 write(int fd, const void *buffer, unsigned size) {
 	if(fd >= 128 || fd <= 0) return 0;
-	lock_acquire(&file_lock);
 	if(fd == 1) {
+		lock_acquire(&file_lock);
 		putbuf(buffer, size);
 		lock_release(&file_lock);
 		return size;
 	}
 	struct thread *curr = thread_current();
 	struct file *f = curr->fd[fd];
-	if(f == NULL) {
-		lock_release(&file_lock);
-		return -1;
-	}
+	if(f == NULL) return -1;
+	lock_acquire(&file_lock);
 	int result = file_write(f, buffer, size);
 	lock_release(&file_lock);
 	return result;

@@ -200,7 +200,7 @@ lock_acquire (struct lock *lock) {
 	old_level = intr_disable();
 
 	if (lock->holder != NULL && !thread_mlfqs) {
-		ASSERT (lock->holder->priority < curr->priority);
+		ASSERT (lock->holder->priority <= curr->priority);
 		curr->lock = lock;
 		lock->holder->priority = curr->priority;
 		thread_refresh_priority (lock->holder);

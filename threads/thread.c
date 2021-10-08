@@ -12,6 +12,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "threads/malloc.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -198,6 +199,13 @@ thread_create (const char *name, int priority,
 	/* Initialize thread. */
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
+
+	struct child_process *child = malloc(sizeof(struct child_process));
+	child->tid = tid;
+	sema_init(&child->wait_sema, 0);
+	list_push_back(&thread_current()->child_list, &child->elem);
+	t->child_struct = child;
+	t->parent = thread_current();
 
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
@@ -606,13 +614,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 		t->recent_cpu = 0;
 	}
 	list_push_back(&all_list, &t->all_elem);
-	t->parent = NULL;
-	if(running_thread()->status == THREAD_RUNNING) {
-		list_push_back(&thread_current()->child_list, &t->child_elem);
-		t->parent = thread_current();
-	}
 	sema_init(&t->fork_sema, 0);
-	sema_init(&t->wait_sema, 0);
 }
 
 bool
