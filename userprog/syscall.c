@@ -201,14 +201,22 @@ open(const char *file) {
 	struct file *f = filesys_open(file);
 	lock_release(&file_lock);
 	if(f == NULL) return -1;
-	struct file_descriptor *fd = malloc(sizeof(struct file_descriptor));
+	struct file_descriptor *file_descriptor = malloc(sizeof(struct file_descriptor));
+	struct list_elem *insert_location = list_end(&curr->fd_list);
 	int i=2;
 	if(!list_empty(&curr->fd_list)) {
-		i = list_entry(list_rbegin(&curr->fd_list), struct file_descriptor, elem)->index + 1;
+		for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+			struct file_descriptor *fd = list_entry(e, struct file_descriptor, elem);
+			if(fd->index > i){
+				insert_location = e;
+				break;
+			}
+			i++;
+		}
 	}
-	fd->fd = f;
-	fd->index = i;
-	list_push_back(&curr->fd_list, &fd->elem);
+	file_descriptor->fd = f;
+	file_descriptor->index = i;
+	list_insert(insert_location, &file_descriptor->elem);
 	return i;
 }
 
