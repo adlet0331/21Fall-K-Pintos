@@ -35,6 +35,12 @@ struct child_process {
 	struct list_elem elem;
 };
 
+struct file_descriptor {
+	int index;
+	struct file *fd;
+	struct list_elem elem;
+};
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -125,7 +131,7 @@ struct thread {
 	struct list child_list;
 	struct child_process *child_struct;
 	struct thread *parent;
-	struct file *fd[130];
+	struct list fd_list;
 	struct intr_frame *fork_frame;
 	struct semaphore fork_sema;
 	struct file *load_file;

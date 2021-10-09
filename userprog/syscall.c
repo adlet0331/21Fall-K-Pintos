@@ -12,6 +12,8 @@
 #include "threads/palloc.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "userprog/process.h"
+#include "threads/malloc.h"
 
 struct lock file_lock;
 
@@ -126,6 +128,13 @@ halt(void) {
 void
 exit(int status) {
 	struct thread *curr = thread_current();
+	
+	while(!list_empty(&curr->child_list)) {
+		struct list_elem *e = list_front(&curr->child_list);
+		struct child_process *child = list_entry(e, struct child_process, elem);
+		process_wait(child->tid);
+	}
+
 	curr->tf.R.rax = status;
 	printf("%s: exit(%d)\n", curr->name, status);
 	if(curr->parent != NULL) {
@@ -133,9 +142,11 @@ exit(int status) {
 		sema_up(&curr->child_struct->wait_sema);
 	}
 	lock_acquire(&file_lock);
-	for(int i=2; i<128; i++){
-		struct file *f = curr->fd[i];
-		if(f != NULL) file_close(f);
+	while(!list_empty(&curr->fd_list)) {
+		struct list_elem *e = list_pop_front(&curr->fd_list);
+		struct file_descriptor *fd = list_entry(e, struct file_descriptor, elem);
+		file_close(fd->fd);
+		free(fd);
 	}
 	file_close(curr->load_file);
 	lock_release(&file_lock);
@@ -151,10 +162,8 @@ fork(const char *thread_name) {
 
 int
 exec(const char *cmd_line) {
-	char *fn = palloc_get_page(PAL_USER);
-	int i;
-	for(i = 0; cmd_line[i] != '\0'; i++) fn[i] = cmd_line[i];
-	fn[i] = 0;
+	char *fn = palloc_get_page(PAL_USER | PAL_ZERO);
+	for(int i = 0; cmd_line[i] != '\0'; i++) fn[i] = cmd_line[i];
 	
 	return process_exec(fn);
 }
@@ -187,26 +196,31 @@ open(const char *file) {
 	struct thread *curr = thread_current();
 	lock_acquire(&file_lock);
 	struct file *f = filesys_open(file);
-	if(f == NULL) {
-		lock_release(&file_lock);
-		return -1;
-	}
-	for(int i = 2; i < 128; i++) {
-		if (curr->fd[i] == NULL) {
-			curr->fd[i] = f;
-			lock_release(&file_lock);
-			return i;
-		}
-	}
 	lock_release(&file_lock);
-	return -1;
+	if(f == NULL) return -1;
+	struct file_descriptor *fd = malloc(sizeof(struct file_descriptor));
+	int i=2;
+	if(!list_empty(&curr->fd_list)) {
+		i = list_entry(list_rbegin(&curr->fd_list), struct file_descriptor, elem)->index + 1;
+	}
+	fd->fd = f;
+	fd->index = i;
+	list_push_back(&curr->fd_list, &fd->elem);
+	return i;
 }
 
 int
 filesize(int fd) {
-	if(fd >= 128 || fd < 0) return 0;
+	if(fd < 0) return 0;
 	struct thread *curr = thread_current();
-	struct file *f = curr->fd[fd];
+	struct file *f = NULL;
+	if(list_empty(&curr->fd_list)) return 0;
+	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+		struct file_descriptor *file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->index == fd) {
+			f = file_descriptor->fd;
+		}
+	}
 	if(f == NULL) return 0;
 	lock_acquire(&file_lock);
 	int result = file_length(f);
@@ -218,7 +232,14 @@ int
 read(int fd, void *buffer, unsigned size) {
 	if(fd == 1 || fd >= 128 || fd < 0) return 0;
 	struct thread *curr = thread_current();
-	struct file *f = curr->fd[fd];
+	struct file *f = NULL;
+	if(list_empty(&curr->fd_list)) return 0;
+	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+		struct file_descriptor *file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->index == fd) {
+			f = file_descriptor->fd;
+		}
+	}
 	if(f == NULL) return -1;
 	lock_acquire(&file_lock);
 	int result = file_read(f, buffer, size);
@@ -236,7 +257,14 @@ write(int fd, const void *buffer, unsigned size) {
 		return size;
 	}
 	struct thread *curr = thread_current();
-	struct file *f = curr->fd[fd];
+	struct file *f = NULL;
+	if(list_empty(&curr->fd_list)) return 0;
+	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+		struct file_descriptor *file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->index == fd) {
+			f = file_descriptor->fd;
+		}
+	}
 	if(f == NULL) return -1;
 	lock_acquire(&file_lock);
 	int result = file_write(f, buffer, size);
@@ -248,7 +276,14 @@ void
 seek(int fd, unsigned position) {
 	if(fd >= 128 || fd < 0) return 0;
 	struct thread *curr = thread_current();
-	struct file *f = curr->fd[fd];
+	struct file *f = NULL;
+	if(list_empty(&curr->fd_list)) return 0;
+	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+		struct file_descriptor *file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->index == fd) {
+			f = file_descriptor->fd;
+		}
+	}
 	if(f == NULL) return;
 	lock_acquire(&file_lock);
 	file_seek(f, position);
@@ -259,7 +294,14 @@ unsigned
 tell(int fd) {
 	if(fd >= 128 || fd < 0) return 0;
 	struct thread *curr = thread_current();
-	struct file *f = curr->fd[fd];
+	struct file *f = NULL;
+	if(list_empty(&curr->fd_list)) return 0;
+	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+		struct file_descriptor *file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->index == fd) {
+			f = file_descriptor->fd;
+		}
+	}
 	if(f == NULL) return;
 	lock_acquire(&file_lock);
 	unsigned result = file_tell(f);
@@ -271,10 +313,20 @@ void
 close(int fd) {
 	if(fd >= 128 || fd < 0) return;
 	struct thread *curr = thread_current();
-	struct file *f = curr->fd[fd];
+	struct file *f = NULL;
+	struct file_descriptor *file_descriptor;
+	if(list_empty(&curr->fd_list)) return 0;
+	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+		file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->index == fd) {
+			f = file_descriptor->fd;
+			break;
+		}
+	}
 	if(f == NULL) return;
-	curr->fd[fd] = NULL;
 	lock_acquire(&file_lock);
 	file_close(f);
 	lock_release(&file_lock);
+	list_remove(&file_descriptor->elem);
+	free(file_descriptor);
 }

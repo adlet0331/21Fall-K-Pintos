@@ -173,11 +173,16 @@ __do_fork (void *aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
-	for(int i=0; i<128; i++) {
-		if(parent->fd[i] != NULL) {
-			lock_acquire(&file_lock);
-			current->fd[i] = file_duplicate(parent->fd[i]);
-			lock_release(&file_lock);
+	ASSERT(list_empty(&current->fd_list));
+	if(!list_empty(&parent->fd_list)) {
+		for(struct list_elem *e = list_front(&parent->fd_list); e != list_end(&parent->fd_list); e = list_next(e)) {
+			struct file_descriptor *file_descriptor = list_entry(e, struct file_descriptor, elem);
+			struct file_descriptor *new = malloc(sizeof(struct file_descriptor));
+			if(new == NULL) goto error;
+			new->fd = file_duplicate(file_descriptor->fd);
+			if(new->fd == NULL) goto error;
+			new->index = file_descriptor->index;
+			list_push_back(&current->fd_list, &new->elem);
 		}
 	}
 	if_.R.rax = 0;
@@ -194,6 +199,14 @@ __do_fork (void *aux) {
 error:
 	fork_success = false;
 	sema_up(&parent->fork_sema);
+	list_remove(&current->child_struct->elem);
+	free(current->child_struct);
+	while(!list_empty(&current->fd_list)) {
+		struct list_elem *e = list_pop_front(&current->fd_list);
+		struct file_descriptor *f = list_entry(e, struct file_descriptor, elem);
+		file_close(f->fd);
+		free(f);
+	}
 	intr_set_level(old_level);
 	thread_exit ();
 }

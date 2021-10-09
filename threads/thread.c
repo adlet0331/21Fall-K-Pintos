@@ -609,6 +609,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->lock = NULL;
 	list_init (&t->locks);
 	list_init (&t->child_list);
+	list_init (&t->fd_list);
 	if(thread_mlfqs){
 		t->nice = 0;
 		t->recent_cpu = 0;
