@@ -115,6 +115,9 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_CLOSE:
 			close(f->R.rdi);
 			break;
+		case SYS_DUP2:
+			f->R.rax = dup2(f->R.rdi, f->R.rsi);
+			break;
 		default:
 			thread_exit();
 	}
@@ -230,7 +233,7 @@ filesize(int fd) {
 
 int
 read(int fd, void *buffer, unsigned size) {
-	if(fd == 1 || fd >= 128 || fd < 0) return 0;
+	if(fd == 1 || fd < 0) return 0;
 	struct thread *curr = thread_current();
 	struct file *f = NULL;
 	if(list_empty(&curr->fd_list)) return 0;
@@ -249,7 +252,7 @@ read(int fd, void *buffer, unsigned size) {
 
 int
 write(int fd, const void *buffer, unsigned size) {
-	if(fd >= 128 || fd <= 0) return 0;
+	if(fd <= 0) return 0;
 	if(fd == 1) {
 		lock_acquire(&file_lock);
 		putbuf(buffer, size);
@@ -274,7 +277,7 @@ write(int fd, const void *buffer, unsigned size) {
 
 void
 seek(int fd, unsigned position) {
-	if(fd >= 128 || fd < 0) return 0;
+	if(fd < 0) return 0;
 	struct thread *curr = thread_current();
 	struct file *f = NULL;
 	if(list_empty(&curr->fd_list)) return 0;
@@ -292,7 +295,7 @@ seek(int fd, unsigned position) {
 
 unsigned
 tell(int fd) {
-	if(fd >= 128 || fd < 0) return 0;
+	if(fd < 0) return 0;
 	struct thread *curr = thread_current();
 	struct file *f = NULL;
 	if(list_empty(&curr->fd_list)) return 0;
@@ -311,7 +314,7 @@ tell(int fd) {
 
 void
 close(int fd) {
-	if(fd >= 128 || fd < 0) return;
+	if(fd < 0) return;
 	struct thread *curr = thread_current();
 	struct file *f = NULL;
 	struct file_descriptor *file_descriptor;
@@ -329,4 +332,58 @@ close(int fd) {
 	lock_release(&file_lock);
 	list_remove(&file_descriptor->elem);
 	free(file_descriptor);
+}
+
+int 
+dup2(int oldfd, int newfd) {
+	struct file_descriptor *file_descriptor;
+	struct file_descriptor *old_file_descriptor;
+	struct file_descriptor *new_file_descriptor;
+	int oldflag = 0, newflag = 0;
+	struct thread *curr = thread_current();
+
+	if(list_empty(&curr->fd_list)) 
+		return -1;
+
+	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+		file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->index == oldfd) {
+			old_file_descriptor = file_descriptor;
+			oldflag = 1;
+			break;
+		}
+	}
+	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+		file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->index == newfd) {
+			new_file_descriptor = file_descriptor;
+			newflag = 1;
+			break;
+		}
+	}
+
+	if(oldflag || old_file_descriptor->fd == NULL) 
+		return -1;
+	if(oldflag && newflag && old_file_descriptor->fd == new_file_descriptor->fd) 
+		return newfd;
+
+	if(!newflag){
+		for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+			file_descriptor = list_entry(e, struct file_descriptor, elem);
+			if(file_descriptor->index > newfd) {
+				new_file_descriptor = malloc(sizeof(struct file_descriptor));
+				
+				new_file_descriptor->index = newfd;
+				new_file_descriptor->fd = file_duplicate(old_file_descriptor->fd);
+				list_insert(&file_descriptor->elem, &new_file_descriptor->elem);
+				break;
+			}
+		}
+	}
+	else{
+		new_file_descriptor->index = newfd;
+		new_file_descriptor->fd = file_duplicate(old_file_descriptor->fd);
+	}
+	
+	return newfd;
 }
