@@ -24,6 +24,7 @@
 #include "threads/synch.h"
 
 extern struct lock file_lock;
+extern int std_in, std_out;
 
 // fork 에러 핸들링
 bool fork_success;
@@ -173,15 +174,21 @@ __do_fork (void *aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
-	ASSERT(list_empty(&current->fd_list));
+	while(!list_empty(&current->fd_list)) {
+		struct list_elem *e = list_pop_front(&current->fd_list);
+		struct file_descriptor *fd = list_entry(e, struct file_descriptor, elem);
+		free(fd);
+	}
 	if(!list_empty(&parent->fd_list)) {
 		for(struct list_elem *e = list_front(&parent->fd_list); e != list_end(&parent->fd_list); e = list_next(e)) {
 			struct file_descriptor *file_descriptor = list_entry(e, struct file_descriptor, elem);
 			struct file_descriptor *new = malloc(sizeof(struct file_descriptor));
 			if(new == NULL) goto error;
-			new->fd = file_duplicate(file_descriptor->fd);
+			if(file_descriptor->fd == &std_in || file_descriptor->fd == &std_out) new->fd = file_descriptor->fd;
+			else new->fd = file_duplicate(file_descriptor->fd);
 			if(new->fd == NULL) goto error;
 			new->index = file_descriptor->index;
+			new->original_index = file_descriptor->original_index;
 			list_push_back(&current->fd_list, &new->elem);
 		}
 	}
@@ -204,7 +211,7 @@ error:
 	while(!list_empty(&current->fd_list)) {
 		struct list_elem *e = list_pop_front(&current->fd_list);
 		struct file_descriptor *f = list_entry(e, struct file_descriptor, elem);
-		file_close(f->fd);
+		if(f->fd != &std_in && f->fd != &std_out) file_close(f->fd);
 		free(f);
 	}
 	intr_set_level(old_level);

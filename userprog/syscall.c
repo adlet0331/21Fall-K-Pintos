@@ -16,6 +16,7 @@
 #include "threads/malloc.h"
 
 struct lock file_lock;
+int std_in, std_out;
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -148,7 +149,7 @@ exit(int status) {
 	while(!list_empty(&curr->fd_list)) {
 		struct list_elem *e = list_pop_front(&curr->fd_list);
 		struct file_descriptor *fd = list_entry(e, struct file_descriptor, elem);
-		file_close(fd->fd);
+		if(fd->fd != &std_in && fd->fd != &std_out) file_close(fd->fd);
 		free(fd);
 	}
 	file_close(curr->load_file);
@@ -215,7 +216,7 @@ open(const char *file) {
 		}
 	}
 	file_descriptor->fd = f;
-	file_descriptor->index = i;
+	file_descriptor->index = file_descriptor->original_index = i;
 	list_insert(insert_location, &file_descriptor->elem);
 	return i;
 }
@@ -241,45 +242,57 @@ filesize(int fd) {
 
 int
 read(int fd, void *buffer, unsigned size) {
-	if(fd == 1 || fd < 0) return 0;
 	struct thread *curr = thread_current();
 	struct file *f = NULL;
+	struct file_descriptor *file_descriptor = NULL;
 	if(list_empty(&curr->fd_list)) return 0;
 	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
-		struct file_descriptor *file_descriptor = list_entry(e, struct file_descriptor, elem);
+		file_descriptor = list_entry(e, struct file_descriptor, elem);
 		if(file_descriptor->index == fd) {
 			f = file_descriptor->fd;
 		}
 	}
 	if(f == NULL) return -1;
+	if(f == &std_in) {
+		if(curr->stdin_close) return 0;
+		lock_acquire(&file_lock);
+		for(unsigned i=0; i<size; i++) *(char *)(buffer+i) = input_getc();
+		lock_release(&file_lock);
+		return size;
+	}
+	if(f == &std_out) return -1;
 	lock_acquire(&file_lock);
 	int result = file_read(f, buffer, size);
 	lock_release(&file_lock);
+	seek(fd, file_tell(f));
 	return result;
 }
 
 int
 write(int fd, const void *buffer, unsigned size) {
-	if(fd <= 0) return 0;
-	if(fd == 1) {
-		lock_acquire(&file_lock);
-		putbuf(buffer, size);
-		lock_release(&file_lock);
-		return size;
-	}
 	struct thread *curr = thread_current();
 	struct file *f = NULL;
+	struct file_descriptor *file_descriptor = NULL;
 	if(list_empty(&curr->fd_list)) return 0;
 	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
-		struct file_descriptor *file_descriptor = list_entry(e, struct file_descriptor, elem);
+		file_descriptor = list_entry(e, struct file_descriptor, elem);
 		if(file_descriptor->index == fd) {
 			f = file_descriptor->fd;
 		}
 	}
 	if(f == NULL) return -1;
+	if(f == &std_in) return -1;
+	if(f == &std_out) {
+		if(curr->stdout_close) return 0;
+		lock_acquire(&file_lock);
+		putbuf(buffer, size);
+		lock_release(&file_lock);
+		return size;
+	}
 	lock_acquire(&file_lock);
 	int result = file_write(f, buffer, size);
 	lock_release(&file_lock);
+	seek(fd, file_tell(f));
 	return result;
 }
 
@@ -287,23 +300,27 @@ void
 seek(int fd, unsigned position) {
 	if(fd < 0) return 0;
 	struct thread *curr = thread_current();
-	struct file_descriptor *file_descriptor = NULL;
-	struct file_descriptor *file_descriptor_copy = NULL;
+	struct file *target_file = NULL;
 	struct file *f2 = NULL;
 	if(list_empty(&curr->fd_list)) return 0;
 	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
-		file_descriptor = list_entry(e, struct file_descriptor, elem);
-		if(file_descriptor->index == fd) break;
+		struct file_descriptor *file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->index == fd) {
+			target_file = file_descriptor->fd;
+			break;
+		}
 	}
-	if(file_descriptor == NULL) return;
-	lock_acquire(&file_lock);
-	file_seek(file_descriptor->fd, position);
-	lock_release(&file_lock);
+	if(target_file == NULL) return;
+	if(target_file == &std_in || target_file == &std_out) return;
+	// lock_acquire(&file_lock);
+	// file_seek(target_file, position);
+	// lock_release(&file_lock);
 	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
-		struct file_descriptor *file_descriptor_copy = list_entry(e, struct file_descriptor, elem);
-		if(file_descriptor_copy->index != fd && file_get_inode(file_descriptor->fd) == file_get_inode(file_descriptor_copy->fd)) {
+		struct file_descriptor *file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->fd == &std_in || file_descriptor->fd == &std_out) continue;
+		if(file_get_inode(target_file) == file_get_inode(file_descriptor->fd)) {
 			lock_acquire(&file_lock);
-			file_seek(file_descriptor_copy->fd, position);
+			file_seek(file_descriptor->fd, position);
 			lock_release(&file_lock);
 		}
 	}
@@ -343,9 +360,13 @@ close(int fd) {
 		}
 	}
 	if(f == NULL) return;
-	lock_acquire(&file_lock);
-	file_close(f);
-	lock_release(&file_lock);
+	if(f == &std_in) curr->stdin_close = true;
+	else if(f == &std_out) curr->stdout_close = true;
+	else {
+		lock_acquire(&file_lock);
+		file_close(f);
+		lock_release(&file_lock);
+	}
 	list_remove(&file_descriptor->elem);
 	free(file_descriptor);
 }
@@ -380,7 +401,7 @@ dup2(int oldfd, int newfd) {
 
 	if(!oldflag || old_file_descriptor->fd == NULL)
 		return -1;
-	if(oldflag == newflag)
+	if(oldfd == newfd)
 		return newfd;
 
 	if(!newflag){
@@ -394,16 +415,23 @@ dup2(int oldfd, int newfd) {
 		}
 		new_file_descriptor = malloc(sizeof(struct file_descriptor));
 		new_file_descriptor->index = newfd;
+		new_file_descriptor->original_index = old_file_descriptor->original_index;
 		lock_acquire(&file_lock);
-		new_file_descriptor->fd = file_duplicate(old_file_descriptor->fd);
+		if(old_file_descriptor->fd != &std_in && old_file_descriptor->fd != &std_out)
+			new_file_descriptor->fd = file_duplicate(old_file_descriptor->fd);
+		else new_file_descriptor->fd = old_file_descriptor->fd;
 		lock_release(&file_lock);
 		list_insert(insert_location, &new_file_descriptor->elem);
 	}
 	else{
 		new_file_descriptor->index = newfd;
+		new_file_descriptor->original_index = old_file_descriptor->original_index;
 		lock_acquire(&file_lock);
-		file_close(new_file_descriptor->fd);
-		new_file_descriptor->fd = file_duplicate(old_file_descriptor->fd);
+		if(new_file_descriptor->fd != &std_in && new_file_descriptor->fd != &std_out)
+			file_close(new_file_descriptor->fd);
+		if(old_file_descriptor->fd != &std_in && old_file_descriptor->fd != &std_out)
+			new_file_descriptor->fd = file_duplicate(old_file_descriptor->fd);
+		else new_file_descriptor->fd = old_file_descriptor->fd;
 		lock_release(&file_lock);
 	}
 	

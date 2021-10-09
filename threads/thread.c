@@ -17,6 +17,8 @@
 #include "userprog/process.h"
 #endif
 
+extern int std_in, std_out;
+
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
@@ -206,6 +208,17 @@ thread_create (const char *name, int priority,
 	list_push_back(&thread_current()->child_list, &child->elem);
 	t->child_struct = child;
 	t->parent = thread_current();
+
+	struct file_descriptor *stdin_fd = malloc(sizeof(struct file_descriptor));
+	struct file_descriptor *stdout_fd = malloc(sizeof(struct file_descriptor));
+	stdin_fd->index = 0;
+	stdin_fd->original_index = 0;
+	stdin_fd->fd = &std_in;
+	stdout_fd->index = 1;
+	stdout_fd->original_index = 1;
+	stdout_fd->fd = &std_out;
+	list_push_back(&t->fd_list, &stdin_fd->elem);
+	list_push_back(&t->fd_list, &stdout_fd->elem);
 
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
@@ -610,6 +623,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	list_init (&t->locks);
 	list_init (&t->child_list);
 	list_init (&t->fd_list);
+	t->stdin_close = false;
+	t->stdout_close = false;
 	if(thread_mlfqs){
 		t->nice = 0;
 		t->recent_cpu = 0;

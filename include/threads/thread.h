@@ -37,6 +37,7 @@ struct child_process {
 
 struct file_descriptor {
 	int index;
+	int original_index;
 	struct file *fd;
 	struct list_elem elem;
 };
@@ -135,6 +136,8 @@ struct thread {
 	struct intr_frame *fork_frame;
 	struct semaphore fork_sema;
 	struct file *load_file;
+	bool stdin_close;
+	bool stdout_close;
 };
 
 /* If false (default), use round-robin scheduler.
