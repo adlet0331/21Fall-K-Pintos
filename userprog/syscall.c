@@ -21,6 +21,7 @@ int std_in, std_out;
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
+// 유저 메모리에 접근하는 포인터인지 판별.
 bool
 invalid_pointer(void *ptr) {
 	if(ptr < 0x400000 || ptr > USER_STACK) return true;
@@ -54,10 +55,12 @@ syscall_init (void) {
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 	
+	//파일 건드릴때 lock 걸어줌
 	lock_init(&file_lock);
 }
 
 /* The main system call interface */
+// 시스템 콜 핸들러. 받고 어셈블리 (%rax, %rdi, %rsi) 처리해주는 곳
 void
 syscall_handler (struct intr_frame *f) {
 	// TODO: Your implementation goes here.
@@ -124,27 +127,34 @@ syscall_handler (struct intr_frame *f) {
 	}
 }
 
+// thread/init.h 의 함수 power_off 사용해서 돌아가고 있는 유저 프로그램 바로 종료시키기
 void
 halt(void) {
 	power_off();
 }
 
+// 유저 프로그램 종료하기
+// kernel로 status 반환 (0 : 성공, 나머지 : 에러)
 void
 exit(int status) {
 	struct thread *curr = thread_current();
 	
+	// 현재 프로세스 child 다 wait 걸기
 	while(!list_empty(&curr->child_list)) {
 		struct list_elem *e = list_front(&curr->child_list);
 		struct child_process *child = list_entry(e, struct child_process, elem);
 		process_wait(child->tid);
 	}
 
+	// 넘겨받은 exit status 출력
 	curr->tf.R.rax = status;
 	printf("%s: exit(%d)\n", curr->name, status);
+	// child 프로세스들 wait 끝내기
 	if(curr->parent != NULL) {
 		curr->child_struct->exit_status = status;
 		sema_up(&curr->child_struct->wait_sema);
 	}
+	// file descriptor 다 닫아주고 free 해주기
 	lock_acquire(&file_lock);
 	while(!list_empty(&curr->fd_list)) {
 		struct list_elem *e = list_pop_front(&curr->fd_list);
@@ -157,6 +167,10 @@ exit(int status) {
 	thread_exit();
 }
 
+// 현재 프로세스(thread_name)와 완전히 똑같은 프로세스 생성 - 실제 실행은 do_fork를 볼 것
+// Register(callee-saved는 빼도 됨), File descripter, User Stack
+// parent 프로세스는 child가 종료될 때 까지 종료 X
+// child process가 종료 실패시 TID_ERROR
 pid_t
 fork(const char *thread_name) {
 	struct thread *curr = thread_current();
@@ -164,6 +178,10 @@ fork(const char *thread_name) {
 	return result;
 }
 
+
+// 현재 실행중인 프로세스를 cmd_line에 입력한 프로세스로 바꿈
+// 성공 : 반환 없음. 
+// 실패 : exit state -1 (아무튼 Load or Run 이 안됨)
 int
 exec(const char *cmd_line) {
 	char *fn = palloc_get_page(PAL_USER | PAL_ZERO);
@@ -172,11 +190,15 @@ exec(const char *cmd_line) {
 	return process_exec(fn);
 }
 
+// pid에 해당하는 프로세스 wait
+// exit status 반환
 int
 wait(pid_t pid) {
 	return process_wait(pid);
 }
 
+// file 이름의 initial_size 크기를 가진 파일을 생성
+// 성공시 true, 실패시 false
 bool
 create(const char *file, unsigned initial_size) {
 	if (strlen(file) == 0)
@@ -187,6 +209,8 @@ create(const char *file, unsigned initial_size) {
 	return result;
 }
 
+// file 이름을 가진 파일을 제거
+// 성공시 true, 실패시 false
 bool
 remove(const char *file) {
 	lock_acquire(&file_lock);
@@ -195,6 +219,8 @@ remove(const char *file) {
 	return result;
 }
 
+// file 이름을 가진 파일을 오픈
+// file descriptor 반환
 int
 open(const char *file) {
 	struct thread *curr = thread_current();
@@ -204,6 +230,7 @@ open(const char *file) {
 	if(f == NULL) return -1;
 	struct file_descriptor *file_descriptor = malloc(sizeof(struct file_descriptor));
 	struct list_elem *insert_location = list_end(&curr->fd_list);
+	// 0과 1은 STDIN, STDOUT를 위해 남겨둠
 	int i=2;
 	if(!list_empty(&curr->fd_list)) {
 		for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
@@ -221,6 +248,7 @@ open(const char *file) {
 	return i;
 }
 
+// 현재 쓰레드의 fd에 있는 파일의 사이즈 반환
 int
 filesize(int fd) {
 	if(fd < 0) return 0;
@@ -240,6 +268,8 @@ filesize(int fd) {
 	return result;
 }
 
+// fd 파일의 size 만큼을 buffer에 넣는 것으로 읽어오기
+// 실패시 -1 반환
 int
 read(int fd, void *buffer, unsigned size) {
 	struct thread *curr = thread_current();
@@ -268,6 +298,8 @@ read(int fd, void *buffer, unsigned size) {
 	return result;
 }
 
+// fd 파일에 size 만큼을 buffer에 있는 것 가져와서 적기
+// 적기 성공한 byte 만큼을 반환
 int
 write(int fd, const void *buffer, unsigned size) {
 	struct thread *curr = thread_current();
@@ -296,6 +328,8 @@ write(int fd, const void *buffer, unsigned size) {
 	return result;
 }
 
+// fd의 다음 읽기/쓰기를 position으로 바꾸기
+// 반환 X
 void
 seek(int fd, unsigned position) {
 	if(fd < 0) return 0;
@@ -326,6 +360,8 @@ seek(int fd, unsigned position) {
 	}
 }
 
+// fd의 현재 읽기/쓰기를 하는 position 반환
+// 반환 X
 unsigned
 tell(int fd) {
 	if(fd < 0) return 0;
@@ -345,6 +381,8 @@ tell(int fd) {
 	return result;
 }
 
+// fd 닫기
+// 반환 X
 void
 close(int fd) {
 	if(fd < 0) return;
@@ -371,6 +409,8 @@ close(int fd) {
 	free(file_descriptor);
 }
 
+// file descriptor 복사해 오기
+// oldfd에서 newfd로 복사하기
 int 
 dup2(int oldfd, int newfd) {
 	struct file_descriptor *file_descriptor;
@@ -382,6 +422,7 @@ dup2(int oldfd, int newfd) {
 	if(list_empty(&curr->fd_list)) 
 		return -1;
 
+	// 
 	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
 		file_descriptor = list_entry(e, struct file_descriptor, elem);
 		if(file_descriptor->index == oldfd) {
