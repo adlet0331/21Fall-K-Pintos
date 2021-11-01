@@ -58,6 +58,7 @@ process_create_initd (const char *file_name) {
 	strlcpy (fn_copy, file_name, PGSIZE);
 
 	/* Create a new thread to execute FILE_NAME. */
+	// cmd 적힌 arguments들 파싱 과정
 	char fn[20] = {}; // 인자 없는 프로그램 이름만 저장
 	for(int i = 0; file_name[i] != ' ' && file_name[i] != '\0'; i++) fn[i] = file_name[i];
 	tid = thread_create (fn, PRI_DEFAULT, initd, fn_copy);
@@ -522,6 +523,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	
 	/* argument passing 관련 */
+	// file name이랑 arguments 파싱 후 레지스터에 저장
 	
 	ASSERT(USER_STACK == if_->rsp);
 	int size;

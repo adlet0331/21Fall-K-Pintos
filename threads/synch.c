@@ -66,7 +66,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		// watiers 리스트의 알맞는 위치에 삽입
+		// watiers 리스트의 알맞는 위치에 삽입 (priority 내림차순)
 		list_insert_ordered (&sema->waiters, &thread_current ()->elem, priority_compare, NULL);
 		thread_block ();
 	}
@@ -119,7 +119,7 @@ sema_up (struct semaphore *sema) {
 		thread_unblock (t);
 	}
 	sema->value++;
-	// priority가 더 높은 thread가 있는 경우
+	// priority가 더 높은 thread가 있는 경우 wait list로 보내버리기
 	if (t != NULL && t->priority > thread_current ()->priority && !intr_context())
 		thread_yield ();
 	intr_set_level (old_level);

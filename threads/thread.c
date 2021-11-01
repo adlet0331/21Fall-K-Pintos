@@ -275,7 +275,7 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_insert_ordered (&ready_list, &t->elem, priority_compare, NULL); // 알맞은 위치에 삽입
+	list_insert_ordered (&ready_list, &t->elem, priority_compare, NULL); // 알맞은 위치에 삽입 (priority 정렬)
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -349,7 +349,7 @@ thread_set_priority (int new_priority) {
 	if (thread_mlfqs){
 		return;
 	}
-	// original_priority 설정함
+	// original_priority 설정함 (lock 풀리면 다시 돌아가기 위해)
 	// ready_list의 front의 priority가 더 높으면 yield
 	int prev_priority = thread_current ()->priority;
 	thread_current ()->original_priority = new_priority;
@@ -365,7 +365,7 @@ thread_get_priority (void) {
 	return thread_current ()->priority;
 }
 
-// 내가 가지고 있는 lock을 분석해서 priority의 최댓값을 설정
+// 내가 가지고 있는 lock을 분석해서 priority의 업데이트 (최대값으로 설정)
 void
 thread_refresh_priority (struct thread *t) {
 	ASSERT (is_thread (t));
@@ -387,7 +387,7 @@ thread_refresh_priority (struct thread *t) {
 	}
 }
 
-// 자신의 priority를 to에게 donate
+// 자신의 priority를 to에게 donate (lock 이슈)
 void
 thread_donate_priority (struct thread *to) {
 	struct thread *curr = thread_current ();
@@ -544,11 +544,11 @@ update_priority(struct thread *curr_thread){
 	}
 }
 
+//모든 priority 업데이트
 void
 update_all_priority(){
 	if (list_empty (&all_list)) return;
 	enum intr_level old_level = intr_disable ();
-	int asdf = list_size (&all_list);
 	for(struct list_elem *thr_elem = list_begin(&all_list); thr_elem != list_end(&all_list); thr_elem = list_next(thr_elem)){
 		struct thread *t = list_entry(thr_elem, struct thread, all_elem);
 		if (t != idle_thread)
@@ -557,6 +557,9 @@ update_all_priority(){
 	intr_set_level (old_level);
 }
 
+// mlfqs 관련 끝
+
+//busy wait 제거
 void
 thread_set_time_to_run(int64_t time) {
 	thread_current ()->time_to_run = time;

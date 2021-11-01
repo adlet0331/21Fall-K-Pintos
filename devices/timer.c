@@ -128,7 +128,7 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
-	// mlfqs 관련 처리
+	// mlfqs 관련 처리 (priority 4틱마다 갱신)
 	ASSERT (intr_get_level () == INTR_OFF);
 	if(thread_mlfqs){
 		struct thread *curr_thread = thread_current();
