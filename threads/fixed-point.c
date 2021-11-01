@@ -1,3 +1,5 @@
+// fixed-point 관련 처리
+
 #include "threads/fixed-point.h"
 #include <inttypes.h>
 

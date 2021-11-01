@@ -28,13 +28,15 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+// child process로서의 정보
 struct child_process {
 	tid_t tid;
 	int exit_status;
-	struct semaphore wait_sema;
+	struct semaphore wait_sema; // process_wait에서 사용할 sema
 	struct list_elem elem;
 };
 
+// file descriptor 정보
 struct file_descriptor {
 	int index;
 	int original_index;
@@ -126,18 +128,18 @@ struct thread {
 	int original_priority; // 원래 priority
 	struct lock *lock; // 내가 기다리는 lock
 	struct list locks; // 내가 acquire한 lock
-	int nice;
-	int recent_cpu;
-	struct list_elem all_elem;
-	struct list child_list;
-	struct child_process *child_struct;
-	struct thread *parent;
-	struct list fd_list;
-	struct intr_frame *fork_frame;
-	struct semaphore fork_sema;
-	struct file *load_file;
-	bool stdin_close;
-	bool stdout_close;
+	int nice; // nice 값 (mlfqs)
+	int recent_cpu; // recent_cpu 값 (mlfqs)
+	struct list_elem all_elem; // 전체 thread의 목록에 들어갈 elem
+	struct list child_list; // 자식 프로세스의 list
+	struct child_process *child_struct; // child로서의 정보
+	struct thread *parent; // 부모 프로세스
+	struct list fd_list; // file descriptor의 list
+	struct intr_frame *fork_frame; // fork하기 위한 intr_frame
+	struct semaphore fork_sema; // fork하기 위한 sema
+	struct file *load_file; // 프로세스를 load하기 위한 file
+	bool stdin_close; // 프로세스에서 stdin이 close 됐는지 확인
+	bool stdout_close; // 프로세스에서 stdout이 close 됐는지 확인
 };
 
 /* If false (default), use round-robin scheduler.
@@ -145,6 +147,7 @@ struct thread {
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
+// 두 thread의 priority 비교
 bool priority_compare (const struct list_elem *, const struct list_elem *, void *);
 
 void thread_init (void);
@@ -168,13 +171,13 @@ void thread_yield (void);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
-void thread_refresh_priority (struct thread *);
-void thread_donate_priority (struct thread *);
+void thread_refresh_priority (struct thread *); // 내가 가지고 있는 lock을 분석해서 priority의 최댓값을 설정
+void thread_donate_priority (struct thread *); // 자신의 priority를 다른 thread에 줌
 
 int thread_get_nice (void);
 void thread_set_nice (int);
 
-int thread_get_load_avg(void);
+/* mlfqs 관련 */
 int thread_get_load_avg (void);
 
 void thread_update_recent_cpu (struct thread *);
@@ -182,9 +185,10 @@ void thread_update_all_recent_cpu (void);
 void thread_increment_recent_cpu(void);
 
 void update_all_priority(void);
+/* mlfqs 관련 */
 
-int64_t thread_get_time_to_run(void);
-void thread_set_time_to_run(int64_t);
+int64_t thread_get_time_to_run(void); // 다시 실행할 시간 찾기
+void thread_set_time_to_run(int64_t); // 다시 실행할 시간 지정
 
 void do_iret (struct intr_frame *tf);
 

@@ -17,6 +17,7 @@
 #include "userprog/process.h"
 #endif
 
+// stdin, stdout file descriptor를 나타냄
 extern int std_in, std_out;
 
 /* Random value for struct thread's `magic' member.
@@ -31,7 +32,7 @@ extern int std_in, std_out;
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
-static struct list all_list;
+static struct list all_list; // block된 thread를 포함하는 list
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -50,7 +51,7 @@ static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
-static int global_load_avg;
+static int global_load_avg; // mlfqs 관련
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
@@ -202,6 +203,7 @@ thread_create (const char *name, int priority,
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
 
+	// child_process 구조체 생성하기
 	struct child_process *child = malloc(sizeof(struct child_process));
 	child->tid = tid;
 	sema_init(&child->wait_sema, 0);
@@ -209,6 +211,7 @@ thread_create (const char *name, int priority,
 	t->child_struct = child;
 	t->parent = thread_current();
 
+	// stdin, stdout file descriptor 만들기
 	struct file_descriptor *stdin_fd = malloc(sizeof(struct file_descriptor));
 	struct file_descriptor *stdout_fd = malloc(sizeof(struct file_descriptor));
 	stdin_fd->index = 0;
@@ -233,8 +236,9 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
-	t->recent_cpu = thread_current ()->recent_cpu;
+	t->recent_cpu = thread_current ()->recent_cpu; // mlfqs 관련
 
+	// 자신보다 더 priority가 높은 경우 yield
 	if (priority > thread_current ()->priority)
 		thread_yield ();
 
@@ -271,7 +275,7 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_insert_ordered (&ready_list, &t->elem, priority_compare, NULL);
+	list_insert_ordered (&ready_list, &t->elem, priority_compare, NULL); // 알맞은 위치에 삽입
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -334,7 +338,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_insert_ordered (&ready_list, &curr->elem, priority_compare, NULL);
+		list_insert_ordered (&ready_list, &curr->elem, priority_compare, NULL); // 알맞은 위치에 삽입
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -345,6 +349,8 @@ thread_set_priority (int new_priority) {
 	if (thread_mlfqs){
 		return;
 	}
+	// original_priority 설정함
+	// ready_list의 front의 priority가 더 높으면 yield
 	int prev_priority = thread_current ()->priority;
 	thread_current ()->original_priority = new_priority;
 	thread_current ()->priority = new_priority;
@@ -381,6 +387,7 @@ thread_refresh_priority (struct thread *t) {
 	}
 }
 
+// 자신의 priority를 to에게 donate
 void
 thread_donate_priority (struct thread *to) {
 	struct thread *curr = thread_current ();
@@ -393,6 +400,7 @@ thread_donate_priority (struct thread *to) {
 void
 thread_set_nice (int nice UNUSED) {
 	/* TODO: Your implementation goes here */
+	// mlfqs 관련
 	enum intr_level old_level;
 
 	old_level = intr_disable ();
@@ -404,6 +412,7 @@ thread_set_nice (int nice UNUSED) {
 int
 thread_get_nice (void) {
 	/* TODO: Your implementation goes here */
+	// mlfqs 관련
 	enum intr_level old_level;
 	old_level = intr_disable ();
 
@@ -413,11 +422,13 @@ thread_get_nice (void) {
 }
 
 /* Returns 100 times the system load average. */
+// mlfqs 관련
 int 
 thread_get_load_avg(void){
 	return fp_round_int (fp_multiply_fp (global_load_avg, int_to_fp (100)));
 }
 
+// mlfqs 관련
 void
 thread_update_load_avg (void) {
 	/* TODO: Your implementation goes here */
@@ -460,6 +471,7 @@ thread_update_load_avg (void) {
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
+// mlfqs 관련
 int
 thread_get_recent_cpu () {
 	/* TODO: Your implementation goes here */
@@ -617,6 +629,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+
+	// 우리가 추가한 멤버의 초기화
 	t->time_to_run = 0;
 	t->original_priority = priority;
 	t->lock = NULL;
@@ -650,6 +664,7 @@ next_thread_to_run (void) {
 	if (list_empty (&ready_list))
 		return idle_thread;
 	else {
+		// ready list를 정렬하고 순서대로 time_to_run이 지났는지 확인
 		list_sort (&ready_list, priority_compare, NULL);
 		for (struct list_elem *e = list_front (&ready_list); e != list_end (&ready_list); e = list_next(e)) {
 			struct thread *t = list_entry (e, struct thread, elem);
@@ -807,7 +822,7 @@ schedule (void) {
 		if (curr && curr->status == THREAD_DYING && curr != initial_thread) {
 			ASSERT (curr != next);
 			list_push_back (&destruction_req, &curr->elem);
-			list_remove (&curr->all_elem);
+			list_remove (&curr->all_elem); // all_list에서 제거
 		}
 
 		/* Before switching the thread, we first save the information

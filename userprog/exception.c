@@ -140,6 +140,7 @@ page_fault (struct intr_frame *f) {
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 
+	// page fault == 오류 (플젝 2에서는)
 	exit(-1);
 
 #ifdef VM

@@ -23,8 +23,8 @@
 #endif
 #include "threads/synch.h"
 
-extern struct lock file_lock;
-extern int std_in, std_out;
+extern struct lock file_lock; // file에 접근하기 위한 lock
+extern int std_in, std_out; // stdin, stdout file descriptor를 나타내기 위한 수단
 
 // fork 에러 핸들링
 bool fork_success;
@@ -58,7 +58,7 @@ process_create_initd (const char *file_name) {
 	strlcpy (fn_copy, file_name, PGSIZE);
 
 	/* Create a new thread to execute FILE_NAME. */
-	char fn[20] = {};
+	char fn[20] = {}; // 인자 없는 프로그램 이름만 저장
 	for(int i = 0; file_name[i] != ' ' && file_name[i] != '\0'; i++) fn[i] = file_name[i];
 	tid = thread_create (fn, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
@@ -85,10 +85,13 @@ initd (void *f_name) {
 tid_t
 process_fork (const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
+	// if_에 부모의 intr_frame이 담겨 있음
 	enum intr_level old_level = intr_disable();
 	tid_t result = thread_create (name,
 			PRI_DEFAULT, __do_fork, if_);
 	if(result == TID_ERROR) return TID_ERROR;
+
+	// child에서 sema_up을 해주기까지 기다림
 	sema_down(&thread_current()->fork_sema);
 	intr_set_level(old_level);
 	if(!fork_success) return TID_ERROR;
@@ -107,6 +110,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
+	// 커널 pte면 아무것도 하지 않음
 	if(is_kern_pte(pte)) {
 		return true;
 	}
@@ -116,11 +120,13 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
+	// 새로운 page 얻기
 	newpage = palloc_get_page(PAL_USER);
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
+	// newpage에 parent_page 내용을 복사하기
 	memcpy(newpage, parent_page, PGSIZE);
 	writable = is_writable((uint64_t *)pte);
 
@@ -128,6 +134,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: if fail to insert page, do error handling. */
+		// page 복사에 실패하면 다시 free해주기
 		palloc_free_page(newpage);
 		return false;
 	}
@@ -146,6 +153,7 @@ __do_fork (void *aux) {
 	struct thread *parent = thread_current()->parent;
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
+	// 부모의 intr_frame을 aux로 넘겨줌
 	struct intr_frame *parent_if = (struct intr_frame *)aux;
 	bool succ = true;
 
@@ -174,11 +182,13 @@ __do_fork (void *aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+	// thread_create? 에서 만들었던 fd_list를 전부 지운다
 	while(!list_empty(&current->fd_list)) {
 		struct list_elem *e = list_pop_front(&current->fd_list);
 		struct file_descriptor *fd = list_entry(e, struct file_descriptor, elem);
 		free(fd);
 	}
+	// 부모 process로부터 file descriptor 복사해오기
 	if(!list_empty(&parent->fd_list)) {
 		for(struct list_elem *e = list_front(&parent->fd_list); e != list_end(&parent->fd_list); e = list_next(e)) {
 			struct file_descriptor *file_descriptor = list_entry(e, struct file_descriptor, elem);
@@ -198,16 +208,22 @@ __do_fork (void *aux) {
 
 	/* Finally, switch to the newly created process. */
 	if (succ) {
+		// fork_sema를 up해서 부모 process가 진행하도록 함
 		fork_success = true;
 		sema_up(&parent->fork_sema);
 		intr_set_level(old_level);
 		do_iret (&if_);
 	}
 error:
+	// fork_sema를 up해서 부모 process가 진행하도록 함
 	fork_success = false;
 	sema_up(&parent->fork_sema);
+
+	// 부모로부터 child의 흔적을 전부 제거함
 	list_remove(&current->child_struct->elem);
 	free(current->child_struct);
+
+	// file descriptor도 전부 제거함
 	while(!list_empty(&current->fd_list)) {
 		struct list_elem *e = list_pop_front(&current->fd_list);
 		struct file_descriptor *f = list_entry(e, struct file_descriptor, elem);
@@ -237,6 +253,7 @@ process_exec (void *f_name) {
 	process_cleanup ();
 
 	/* And then load the binary */
+	// file 접근은 flie_lock 사용
 	lock_acquire(&file_lock);
 	success = load (file_name, &_if);
 	lock_release(&file_lock);
@@ -270,6 +287,7 @@ process_wait (tid_t child_tid) {
 	struct child_process *child = NULL;
 	enum intr_level old_level;
 
+	// child_list에 해당 child_tid인 것이 있는지 확인
 	for(struct list_elem *e = list_begin(&curr->child_list); e != list_end(&curr->child_list); e = list_next(e)){
 		struct child_process *t = list_entry(e, struct child_process, elem);
 		if (t->tid == child_tid){
@@ -280,6 +298,8 @@ process_wait (tid_t child_tid) {
 	if(child == NULL)
 		return -1;
 
+	// sema를 이용해서 기다린다.
+	// child는 exit할 때 sema_up을 한다.
 	sema_down(&child->wait_sema);
 	list_remove(&child->elem);
 	int result = child->exit_status;
@@ -417,7 +437,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* Open executable file. */
 	char *file_argues_ptr;
-	char fn[20] = {};
+	char fn[20] = {}; // 인자 없이 프로세스 이름만 저장
 	for(int i = 0; file_name[i] != ' ' && file_name[i] != '\0'; i++) fn[i] = file_name[i];
 
 	file = filesys_open (fn);
@@ -500,6 +520,9 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	
+	/* argument passing 관련 */
+	
 	ASSERT(USER_STACK == if_->rsp);
 	int size;
 	int upper_words_size = 0;
@@ -531,11 +554,14 @@ load (const char *file_name, struct intr_frame *if_) {
 	if_->R.rsi = return_address + 8;
 	if_->rsp = return_address;
 
+	/* argument passing 관련 */
+
 	success = true;
 
 done:
 	/* We arrive here whether the load is successful or not. */
 	if(success) {
+		// close하지는 않음. exit할 때 close함
 		file_deny_write(file);
 		thread_current()->load_file = file;
 	}

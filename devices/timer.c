@@ -94,6 +94,7 @@ timer_sleep (int64_t ticks) {
 
 	ASSERT (intr_get_level () == INTR_ON);
 	
+	// 다시 실행할 시간 지정
 	thread_set_time_to_run(start + ticks);
 	thread_yield();
 }
@@ -127,6 +128,7 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
+	// mlfqs 관련 처리
 	ASSERT (intr_get_level () == INTR_OFF);
 	if(thread_mlfqs){
 		struct thread *curr_thread = thread_current();

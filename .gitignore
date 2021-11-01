@@ -1,5 +1,7 @@
 .vscode/
 threads/build/
 userprog/build/
+vm/build/
+filesys/build/
 pincheck-kaist/
 utils/pincheck

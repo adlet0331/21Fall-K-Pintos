@@ -1,3 +1,5 @@
+// fixed-point 관련 처리
+
 #define F (1 << 14)
 #define FP_MAX ((1 << 31) -1)
 #define FP_MIN (-(1 << 31))
