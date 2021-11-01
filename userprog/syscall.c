@@ -22,6 +22,7 @@ void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
 // 유저 메모리에 접근하는 포인터인지 판별.
+// 커널 메모리에 접근 또는 잘못된 주소면 false 반환
 bool
 invalid_pointer(void *ptr) {
 	if(ptr < 0x400000 || ptr > USER_STACK) return true;
@@ -139,7 +140,7 @@ void
 exit(int status) {
 	struct thread *curr = thread_current();
 	
-	// 현재 프로세스 child 다 wait 걸기
+	// 현재 프로세스의 모든 child를 기다리기
 	while(!list_empty(&curr->child_list)) {
 		struct list_elem *e = list_front(&curr->child_list);
 		struct child_process *child = list_entry(e, struct child_process, elem);
@@ -149,7 +150,7 @@ exit(int status) {
 	// 넘겨받은 exit status 출력
 	curr->tf.R.rax = status;
 	printf("%s: exit(%d)\n", curr->name, status);
-	// child 프로세스들 wait 끝내기
+	// 부모의 wait를 위해 sema_up
 	if(curr->parent != NULL) {
 		curr->child_struct->exit_status = status;
 		sema_up(&curr->child_struct->wait_sema);
@@ -177,7 +178,6 @@ fork(const char *thread_name) {
 	pid_t result = process_fork(thread_name, curr->fork_frame);
 	return result;
 }
-
 
 // 현재 실행중인 프로세스를 cmd_line에 입력한 프로세스로 바꿈
 // 성공 : 반환 없음. 
@@ -294,7 +294,7 @@ read(int fd, void *buffer, unsigned size) {
 	lock_acquire(&file_lock);
 	int result = file_read(f, buffer, size);
 	lock_release(&file_lock);
-	seek(fd, file_tell(f));
+	seek(fd, file_tell(f)); // dup2로 복사한 파일도 처리하기
 	return result;
 }
 
@@ -324,7 +324,7 @@ write(int fd, const void *buffer, unsigned size) {
 	lock_acquire(&file_lock);
 	int result = file_write(f, buffer, size);
 	lock_release(&file_lock);
-	seek(fd, file_tell(f));
+	seek(fd, file_tell(f)); // dup2로 복사한 파일도 처리하기
 	return result;
 }
 
@@ -346,9 +346,7 @@ seek(int fd, unsigned position) {
 	}
 	if(target_file == NULL) return;
 	if(target_file == &std_in || target_file == &std_out) return;
-	// lock_acquire(&file_lock);
-	// file_seek(target_file, position);
-	// lock_release(&file_lock);
+	// dup2로 복사된 fd들도 전부 seek 해줘야 됨
 	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
 		struct file_descriptor *file_descriptor = list_entry(e, struct file_descriptor, elem);
 		if(file_descriptor->fd == &std_in || file_descriptor->fd == &std_out) continue;
@@ -411,6 +409,8 @@ close(int fd) {
 
 // file descriptor 복사해 오기
 // oldfd에서 newfd로 복사하기
+// oldfd가 invalid: 복사 안 하고 -1 반환
+// oldfd가 valid: 복사 하고 newfd 반환
 int 
 dup2(int oldfd, int newfd) {
 	struct file_descriptor *file_descriptor;
@@ -419,10 +419,11 @@ dup2(int oldfd, int newfd) {
 	int oldflag = 0, newflag = 0;
 	struct thread *curr = thread_current();
 
+	// fd_list가 비어 있으면 실패
 	if(list_empty(&curr->fd_list)) 
 		return -1;
 
-	// 
+	// fd_list에 oldfd가 있는지 확인, 있으면 oldflag = 1
 	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
 		file_descriptor = list_entry(e, struct file_descriptor, elem);
 		if(file_descriptor->index == oldfd) {
@@ -431,6 +432,8 @@ dup2(int oldfd, int newfd) {
 			break;
 		}
 	}
+
+	// fd_list에 newfd가 있는지 확인, 있으면 newflag = 1
 	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
 		file_descriptor = list_entry(e, struct file_descriptor, elem);
 		if(file_descriptor->index == newfd) {
@@ -440,13 +443,18 @@ dup2(int oldfd, int newfd) {
 		}
 	}
 
+	// oldfd가 invalid 한 경우
 	if(!oldflag || old_file_descriptor->fd == NULL)
 		return -1;
+
+	// oldfd와 newfd가 같은 경우
 	if(oldfd == newfd)
 		return newfd;
 
+	// newfd가 존재하지 않는 경우, 새로운 fd 생성
 	if(!newflag){
 		struct list_elem *insert_location = list_end(&curr->fd_list);
+		// fd_list는 오름차순 정렬이므로 insert 위치 정해야 됨
 		for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
 			file_descriptor = list_entry(e, struct file_descriptor, elem);
 			if(file_descriptor->index > newfd) {
@@ -454,22 +462,28 @@ dup2(int oldfd, int newfd) {
 				break;
 			}
 		}
+		// new_file_descriptor 만들기
 		new_file_descriptor = malloc(sizeof(struct file_descriptor));
 		new_file_descriptor->index = newfd;
 		new_file_descriptor->original_index = old_file_descriptor->original_index;
 		lock_acquire(&file_lock);
+		// stdin, stdout인 경우 구별해서 처리
 		if(old_file_descriptor->fd != &std_in && old_file_descriptor->fd != &std_out)
 			new_file_descriptor->fd = file_duplicate(old_file_descriptor->fd);
 		else new_file_descriptor->fd = old_file_descriptor->fd;
 		lock_release(&file_lock);
 		list_insert(insert_location, &new_file_descriptor->elem);
 	}
+
+	// newfd가 존재하는 경우, oldfd에서 복사해서 덮어씀
 	else{
 		new_file_descriptor->index = newfd;
 		new_file_descriptor->original_index = old_file_descriptor->original_index;
 		lock_acquire(&file_lock);
+		// 기존 newfd 닫기
 		if(new_file_descriptor->fd != &std_in && new_file_descriptor->fd != &std_out)
 			file_close(new_file_descriptor->fd);
+		// stdin, stdout인 경우 구별해서 처리
 		if(old_file_descriptor->fd != &std_in && old_file_descriptor->fd != &std_out)
 			new_file_descriptor->fd = file_duplicate(old_file_descriptor->fd);
 		else new_file_descriptor->fd = old_file_descriptor->fd;
