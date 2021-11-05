@@ -3,6 +3,7 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "lib/kernel/hash.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -61,20 +62,27 @@ err:
 }
 
 /* Find VA from spt and return page. On error, return NULL. */
+// spt의 page_table에서 VA 로 page 찾기
 struct page *
-spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
+spt_find_page (struct supplemental_page_table *spt, void *va) {
 	struct page *page = NULL;
 	/* TODO: Fill this function. */
+	void *page_index = (&va) && VM_INDEX;
+	hash_find(spt, page_index);
 
 	return page;
 }
 
 /* Insert PAGE into spt with validation. */
+// spt의 page_table에 page 넣기
 bool
-spt_insert_page (struct supplemental_page_table *spt UNUSED,
-		struct page *page UNUSED) {
+spt_insert_page (struct supplemental_page_table *spt,
+		struct page *page) {
 	int succ = false;
 	/* TODO: Fill this function. */
+	if (hash_insert(&spt->page_table, &page->hash_elem) == NULL){
+		succ = true;
+	}
 
 	return succ;
 }
@@ -108,10 +116,17 @@ vm_evict_frame (void) {
  * and return it. This always return valid address. That is, if the user pool
  * memory is full, this function evicts the frame to get the available memory
  * space.*/
+// Get frame. Page X -> Page 요구 | UM Full -> frame 하나 쏙 빼서 그걸로 가져오기
 static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
+	struct page *physical_page = palloc_get_page(PAL_USER);
+	frame = malloc(sizeof(struct frame));
+
+	frame->page = physical_page;
+	physical_page->frame = frame;
+	physical_page->va = physical_page;
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -167,13 +182,30 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	struct supplemental_page_table *sup_pt = &thread_current()->spt;
+	hash_insert(&sup_pt->page_table, &page->hash_elem);
 
 	return swap_in (page, frame->kva);
 }
 
+// page의 VA로 hash
+unsigned
+page_hash_func(struct hash_elem *e, void *aux UNUSED){
+	const struct page *p = hash_entry(e, struct page, hash_elem);
+	return hash_bytes(&p->va, sizeof p->va);
+}
+
+// 두 page의 비교
+bool
+spt_hash_less_func(struct hash_elem *a, struct hash_elem *b, void *aux){
+	return (page_hash_func(a, NULL) < page_hash_func(b, NULL));
+}
+
 /* Initialize new supplemental page table */
+// stp 초기화
 void
-supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+supplemental_page_table_init (struct supplemental_page_table *spt) {
+	hash_init(&spt->page_table, page_hash_func, spt_hash_less_func, NULL);
 }
 
 /* Copy supplemental page table from src to dst */

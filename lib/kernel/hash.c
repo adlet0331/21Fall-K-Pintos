@@ -23,7 +23,7 @@ static void rehash (struct hash *);
    compare hash elements using LESS, given auxiliary data AUX. */
 bool
 hash_init (struct hash *h,
-		hash_hash_func *hash, hash_less_func *less, void *aux) {
+		hash_hash_func *hash, hash_less_func *less, void *aux UNUSED) {
 	h->elem_cnt = 0;
 	h->bucket_cnt = 4;
 	h->buckets = malloc (sizeof *h->buckets * h->bucket_cnt);
