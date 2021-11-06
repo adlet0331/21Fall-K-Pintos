@@ -740,6 +740,8 @@ lazy_load_segment (struct page *page, void *aux) {
  *
  * Return true if successful, false if a memory allocation error
  * or disk read error occurs. */
+/* 	File에서 Adress : UPAGE + offset
+	Adress부터 READ_BYTES만큼 읽기*/ 
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
