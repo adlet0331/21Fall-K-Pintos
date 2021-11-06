@@ -121,12 +121,9 @@ static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
-	struct page *physical_page = palloc_get_page(PAL_USER);
+	void *physical_addr = palloc_get_page(PAL_USER);
 	frame = malloc(sizeof(struct frame));
-
-	frame->page = physical_page;
-	physical_page->frame = frame;
-	physical_page->va = physical_page;
+	frame->kva = physical_addr;
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
