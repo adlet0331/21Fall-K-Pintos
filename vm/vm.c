@@ -90,12 +90,11 @@ spt_find_page (struct supplemental_page_table *spt, void *va) {
 	hash_first(&i, &spt->page_table);
 	while (hash_next(&i)){
 		struct page *f = hash_entry(hash_cur(&i), struct page, hash_elem);
-		if ((int64_t) f->va == ((int64_t)va & PGMASK)){
-			page = f;
+		if ((int64_t) f->va == ((int64_t)va & ~PGMASK)){
+			return f;
 		}
 	}
-
-	return page;
+	return NULL;
 }
 
 /* Insert PAGE into spt with validation. */
@@ -105,6 +104,7 @@ spt_insert_page (struct supplemental_page_table *spt,
 		struct page *page) {
 	bool succ = false;
 	/* DONE: Fill this function. */
+	if(hash_find(&spt->page_table, &page->hash_elem)) return true;
 	if (hash_insert(&spt->page_table, &page->hash_elem) == NULL){
 		succ = true;
 	}
@@ -180,6 +180,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr,
 	/* TODO: Your code goes here */
 	
 	page = spt_find_page(spt, addr);
+	if(page == NULL) return false; // 잘못된 주소
 
 	return vm_do_claim_page (page);
 }
@@ -196,11 +197,12 @@ vm_dealloc_page (struct page *page) {
 // 
 bool
 vm_claim_page (void *va) {
-	struct page *page = malloc(sizeof(struct page));
 	/* DONE: Fill this function */
-	void *va_index = (int64_t)(&va) & PGMASK;
-	if (spt_find_page(&thread_current()->spt, &va_index) == NULL){
-		vm_alloc_page(VM_UNINIT, &va_index, true);
+	void *va_index = (int64_t)(va) & ~PGMASK;
+	struct page *page = spt_find_page(&thread_current()->spt, va_index);
+	if (page == NULL){
+		vm_alloc_page(VM_ANON, va_index, true);
+		page = spt_find_page(&thread_current()->spt, va_index);
 	}
 
 	return vm_do_claim_page (page);
@@ -214,10 +216,11 @@ vm_do_claim_page (struct page *page) {
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
-
+	if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, true))
+		return false;
+	void * asdf = thread_current()->pml4;
 	/* DONE: Insert page table entry to map page's VA to frame's PA. */
 	struct supplemental_page_table *sup_pt = &thread_current()->spt;
-	hash_insert(&sup_pt->page_table, &page->hash_elem);
 
 	return swap_in (page, frame->kva);
 }
