@@ -1,9 +1,10 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
+#include "lib/kernel/hash.h"
 #include "threads/malloc.h"
+#include "threads/vaddr.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
-#include "lib/kernel/hash.h"
 #include "vm/uninit.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -57,14 +58,22 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		 * TODO: should modify the field after calling the uninit_new. */
 		
 		/* TODO: Insert the page into the spt. */
-		//TODO : writable 정보, init 랑 aux 처리
 		if (type == VM_UNINIT){
+			// struct page *pg = malloc(sizeof(struct page));
+			// uninit_new(&pg, &upage, &init, VM_UNINIT, &aux, NULL);
+			// spt_insert_page(&spt, &pg);
+		}
+		else if (type == VM_ANON){
 			struct page *pg = malloc(sizeof(struct page));
-			uninit_new(&pg, &upage, NULL, VM_UNINIT, NULL, NULL);
-			spt_insert_page(&spt, &pg);
+			uninit_new(pg, upage, init, VM_ANON, aux, anon_initializer);
+			spt_insert_page(spt, pg);
+			return true;
+		}
+		else if (type == VM_FILE){
+			goto err;
 		}
 		else{
-			ASSERT(false);
+			goto err;
 		}		
 	}
 err:
@@ -77,8 +86,14 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt, void *va) {
 	struct page *page = NULL;
 	/* DONE: Fill this function. */
-	void *page_index = (int64_t)(&va) & VM_INDEX;
-	page = hash_entry(hash_find(spt, page_index), struct page, hash_elem);
+	struct hash_iterator i;
+	hash_first(&i, &spt->page_table);
+	while (hash_next(&i)){
+		struct page *f = hash_entry(hash_cur(&i), struct page, hash_elem);
+		if ((int64_t) f->va == ((int64_t)va & PGMASK)){
+			page = f;
+		}
+	}
 
 	return page;
 }
@@ -88,7 +103,7 @@ spt_find_page (struct supplemental_page_table *spt, void *va) {
 bool
 spt_insert_page (struct supplemental_page_table *spt,
 		struct page *page) {
-	int succ = false;
+	bool succ = false;
 	/* DONE: Fill this function. */
 	if (hash_insert(&spt->page_table, &page->hash_elem) == NULL){
 		succ = true;
@@ -138,6 +153,7 @@ vm_get_frame (void) {
 	}
 	frame = malloc(sizeof(struct frame));
 	frame->kva = phys_page;
+	frame->page = NULL;
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -156,12 +172,14 @@ vm_handle_wp (struct page *page UNUSED) {
 
 /* Return true on success */
 bool
-vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
+vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
+	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+	
+	page = spt_find_page(spt, addr);
 
 	return vm_do_claim_page (page);
 }
@@ -180,7 +198,7 @@ bool
 vm_claim_page (void *va) {
 	struct page *page = malloc(sizeof(struct page));
 	/* DONE: Fill this function */
-	void *va_index = (int64_t)(&va) & VM_INDEX;
+	void *va_index = (int64_t)(&va) & PGMASK;
 	if (spt_find_page(&thread_current()->spt, &va_index) == NULL){
 		vm_alloc_page(VM_UNINIT, &va_index, true);
 	}
@@ -208,7 +226,8 @@ vm_do_claim_page (struct page *page) {
 unsigned
 page_hash_func(struct hash_elem *e, void *aux UNUSED){
 	const struct page *p = hash_entry(e, struct page, hash_elem);
-	return hash_bytes(&p->va, sizeof p->va);
+	uint64_t va = (uint64_t) p->va & ~PGMASK;
+	return hash_bytes((&va), sizeof(va));
 }
 
 // Local Func : 두 page의 비교

@@ -42,7 +42,8 @@ uninit_new (struct page *page, void *va, vm_initializer *init,
 	};
 }
 
-/* Initalize the page on first fault */
+/* TODO : Initalize the page on first fault */
+// First Page Fault (Try to access a page, no contents)
 static bool
 uninit_initialize (struct page *page, void *kva) {
 	struct uninit_page *uninit = &page->uninit;

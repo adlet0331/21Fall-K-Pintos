@@ -36,7 +36,6 @@ struct page_operations;
 struct thread;
 
 #define VM_TYPE(type) ((type) & 7)
-#define VM_INDEX 0xFFFFFFFFF000
 
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
