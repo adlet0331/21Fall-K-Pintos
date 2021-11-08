@@ -1,5 +1,6 @@
 /* anon.c: Implementation of page for non-disk image (a.k.a. anonymous page). */
 
+#include "threads/mmu.h"
 #include "vm/vm.h"
 #include "devices/disk.h"
 
@@ -53,7 +54,9 @@ anon_swap_out (struct page *page) {
 /* TODO : Destroy the anonymous page. PAGE will be freed by the caller. */
 static void
 anon_destroy (struct page *page) {
-	palloc_free_page(page->va);
-	palloc_free_page(page->frame->kva);
-	free(page->frame);
+	pml4_clear_page(thread_current()->pml4, page->va);
+	if(page->frame) {
+		palloc_free_page(page->frame->kva);
+		free(page->frame);
+	}
 }

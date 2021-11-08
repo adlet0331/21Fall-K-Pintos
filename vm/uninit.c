@@ -8,6 +8,7 @@
  * function.
  * */
 
+#include "threads/mmu.h"
 #include "vm/vm.h"
 #include "vm/uninit.h"
 
@@ -63,7 +64,4 @@ uninit_initialize (struct page *page, void *kva) {
  * PAGE will be freed by the caller. */
 static void
 uninit_destroy (struct page *page) {
-	palloc_free_page(page->va);
-	palloc_free_page(page->frame->kva);
-	free(page->frame);
 }

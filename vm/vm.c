@@ -1,5 +1,6 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
+#include "lib/string.h"
 #include "lib/kernel/hash.h"
 #include "threads/malloc.h"
 #include "threads/vaddr.h"
@@ -244,7 +245,7 @@ bool
 supplemental_page_table_copy (struct supplemental_page_table *dst,
 		struct supplemental_page_table *src) {
 	// COW 언젠가 해야 됨
-	// 모든 page를 복사해서 붙임
+	// 일단은 모든 page를 복사해서 붙임
 	struct hash_iterator i;
 	hash_first(&i, &src->page_table);
 	while(hash_next(&i)) {
@@ -253,6 +254,13 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 		vm_claim_page(page->va);
 		struct page *new_page = spt_find_page(dst, page->va);
 		if(new_page == NULL) return false;
+		if(page->frame) { // 이미 frame이 할당된 page라면
+			vm_claim_page(page->va);
+			memcpy(new_page->frame->kva, page->frame->kva, PGSIZE);
+		}
+		else { // lazy_load 때문에 아직 frame 할당 안 된 상태
+			new_page->uninit = page->uninit;
+		}
 	}
 	return true;
 }
@@ -263,12 +271,14 @@ supplemental_page_table_kill (struct supplemental_page_table *spt) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
 	struct hash_iterator i;
-	hash_first(&i, &spt->page_table);
-	struct page *page = hash_entry(hash_cur(&i), struct page, hash_elem);
-	hash_next(&i);
-	while (&i == NULL){
-		spt_remove_page(spt, page);
+	struct page *pg;
+	while (1){
+		if(hash_empty(&spt->page_table))
+			return;
+		hash_first(&i, &spt->page_table);
 		hash_next(&i);
-		page = hash_entry(hash_cur(&i), struct page, hash_elem);
+		pg = hash_entry(hash_cur(&i), struct page, hash_elem);
+		spt_remove_page(spt, pg);
+		hash_delete(&spt->page_table, hash_cur(&i));
 	}
 }
