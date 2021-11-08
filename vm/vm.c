@@ -62,6 +62,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			struct page *pg = malloc(sizeof(struct page));
 			uninit_new(pg, upage, init, VM_ANON, aux, anon_initializer);
 			spt_insert_page(spt, pg);
+			pg->writable = writable;
 			return true;
 		}
 		else if (type == VM_FILE){
@@ -112,7 +113,6 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	if (spt_find_page(spt, page->va) == NULL)
 		return;
 	hash_delete(&spt->page_table, &page->hash_elem);
-	vm_dealloc_page (page->frame);
 	vm_dealloc_page (page);
 	return;
 }
@@ -199,11 +199,6 @@ vm_claim_page (void *va) {
 	/* DONE: Fill this function */
 	void *va_index = (int64_t)(va) & ~PGMASK;
 	struct page *page = spt_find_page(&thread_current()->spt, va_index);
-	if (page == NULL){
-		// setup_stack에서 넘어옴
-		vm_alloc_page(VM_ANON, va_index, true); // 스택은 writable함!
-		page = spt_find_page(&thread_current()->spt, va_index);
-	}
 
 	return vm_do_claim_page (page);
 }
@@ -216,7 +211,7 @@ vm_do_claim_page (struct page *page) {
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
-	if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, true))
+	if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))
 		return false;
 	/* DONE: Insert page table entry to map page's VA to frame's PA. */
 	struct supplemental_page_table *sup_pt = &thread_current()->spt;
@@ -246,10 +241,20 @@ supplemental_page_table_init (struct supplemental_page_table *spt) {
 
 /* DONE : Copy supplemental page table from src to dst */
 bool
-supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
-		struct supplemental_page_table *src UNUSED) {
+supplemental_page_table_copy (struct supplemental_page_table *dst,
+		struct supplemental_page_table *src) {
 	// COW 언젠가 해야 됨
-	
+	// 모든 page를 복사해서 붙임
+	struct hash_iterator i;
+	hash_first(&i, &src->page_table);
+	while(hash_next(&i)) {
+		struct page *page = hash_entry(hash_cur(&i), struct page, hash_elem);
+		if(!vm_alloc_page(VM_ANON, page->va, page->writable)) return false;
+		vm_claim_page(page->va);
+		struct page *new_page = spt_find_page(dst, page->va);
+		if(new_page == NULL) return false;
+	}
+	return true;
 }
 
 /* DONE : Free the resource hold by the supplemental page table */
@@ -257,10 +262,10 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-	struct hash_iterator i;
-	hash_first(&i, &spt->page_table);
-	while (hash_next(&i)){
-		struct page *page = hash_entry(hash_cur(&i), struct page, hash_elem);
-		spt_remove_page(spt, page);
-	}
+	// struct hash_iterator i;
+	// hash_first(&i, &spt->page_table);
+	// while (hash_next(&i)){
+	// 	struct page *page = hash_entry(hash_cur(&i), struct page, hash_elem);
+	// 	spt_remove_page(spt, page);
+	// }
 }

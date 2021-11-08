@@ -29,11 +29,9 @@ bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	page->operations = &anon_ops;
-	bool writable = page->uninit.writable;
 
 	page->anon = (struct anon_page) {
 		.is_initialized = true,
-		.writable = writable
 	};
 	
 	return true;
@@ -55,5 +53,7 @@ anon_swap_out (struct page *page) {
 /* TODO : Destroy the anonymous page. PAGE will be freed by the caller. */
 static void
 anon_destroy (struct page *page) {
-	spt_remove_page(&thread_current()->spt, page);
+	palloc_free_page(page->va);
+	palloc_free_page(page->frame->kva);
+	free(page->frame);
 }
