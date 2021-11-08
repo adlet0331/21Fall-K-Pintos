@@ -266,6 +266,7 @@ process_exec (void *f_name) {
 	/* And then load the binary */
 	// file 접근은 flie_lock 사용
 	lock_acquire(&file_lock);
+	supplemental_page_table_init (&thread_current ()->spt);
 	success = load (file_name, &_if);
 	lock_release(&file_lock);
 
