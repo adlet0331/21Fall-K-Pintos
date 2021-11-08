@@ -745,6 +745,7 @@ lazy_load_segment (struct page *page, struct lazy_load_arg *aux) {
 	free(aux);
 
 	// file에서 frame으로 읽기
+	page->uninit.writable = writable;
 	if (!vm_claim_page(page->va)) return false;
 	file_seek(file, ofs);
 	if(file_read(file, page->va, read_bytes) != read_bytes) {

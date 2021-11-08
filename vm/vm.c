@@ -58,12 +58,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		 * TODO: should modify the field after calling the uninit_new. */
 		
 		/* TODO: Insert the page into the spt. */
-		if (type == VM_UNINIT){
-			// struct page *pg = malloc(sizeof(struct page));
-			// uninit_new(&pg, &upage, &init, VM_UNINIT, &aux, NULL);
-			// spt_insert_page(&spt, &pg);
-		}
-		else if (type == VM_ANON){
+		if (type == VM_ANON){
 			struct page *pg = malloc(sizeof(struct page));
 			uninit_new(pg, upage, init, VM_ANON, aux, anon_initializer);
 			spt_insert_page(spt, pg);
@@ -201,7 +196,8 @@ vm_claim_page (void *va) {
 	void *va_index = (int64_t)(va) & ~PGMASK;
 	struct page *page = spt_find_page(&thread_current()->spt, va_index);
 	if (page == NULL){
-		vm_alloc_page(VM_ANON, va_index, true);
+		// setup_stack에서 넘어옴
+		vm_alloc_page(VM_ANON, va_index, true); // 스택은 writable함!
 		page = spt_find_page(&thread_current()->spt, va_index);
 	}
 
@@ -218,7 +214,6 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 	if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, true))
 		return false;
-	void * asdf = thread_current()->pml4;
 	/* DONE: Insert page table entry to map page's VA to frame's PA. */
 	struct supplemental_page_table *sup_pt = &thread_current()->spt;
 
@@ -249,6 +244,8 @@ supplemental_page_table_init (struct supplemental_page_table *spt) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
+	// COW 언젠가 해야 됨
+	
 }
 
 /* DONE : Free the resource hold by the supplemental page table */

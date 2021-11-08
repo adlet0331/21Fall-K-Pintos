@@ -29,9 +29,11 @@ bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	page->operations = &anon_ops;
+	bool writable = page->uninit.writable;
 
 	page->anon = (struct anon_page) {
-		.is_initialized = true
+		.is_initialized = true,
+		.writable = writable
 	};
 	
 	return true;

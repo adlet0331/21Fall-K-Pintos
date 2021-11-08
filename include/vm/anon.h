@@ -6,6 +6,7 @@ enum vm_type;
 
 struct anon_page {
     bool is_initialized;
+    bool writable; // COW: 진짜 writable임
 };
 
 void vm_anon_init (void);

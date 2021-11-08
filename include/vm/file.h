@@ -7,6 +7,7 @@ struct page;
 enum vm_type;
 
 struct file_page {
+	bool writable; // COW: 진짜 writable임
 };
 
 void vm_file_init (void);
