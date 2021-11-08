@@ -109,8 +109,12 @@ spt_insert_page (struct supplemental_page_table *spt,
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
+	if (spt_find_page(spt, page->va) == NULL)
+		return;
+	hash_delete(&spt->page_table, &page->hash_elem);
+	vm_dealloc_page (page->frame);
 	vm_dealloc_page (page);
-	return true;
+	return;
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -250,7 +254,13 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 
 /* DONE : Free the resource hold by the supplemental page table */
 void
-supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
+supplemental_page_table_kill (struct supplemental_page_table *spt) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	struct hash_iterator i;
+	hash_first(&i, &spt->page_table);
+	while (hash_next(&i)){
+		struct page *page = hash_entry(hash_cur(&i), struct page, hash_elem);
+		spt_remove_page(spt, page);
+	}
 }
