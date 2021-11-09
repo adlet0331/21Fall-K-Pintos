@@ -4,6 +4,7 @@
 #include "lib/kernel/hash.h"
 #include "threads/malloc.h"
 #include "threads/vaddr.h"
+#include "threads/mmu.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "vm/uninit.h"
@@ -162,7 +163,9 @@ vm_get_frame (void) {
 
 /* Growing the stack. */
 static void
-vm_stack_growth (void *addr UNUSED) {
+vm_stack_growth (void *addr) {
+	void *va = (uint64_t)addr & ~PGMASK;
+	vm_alloc_page(VM_ANON, va, true);
 }
 
 /* Handle the fault on write_protected page */
@@ -172,15 +175,26 @@ vm_handle_wp (struct page *page UNUSED) {
 
 /* Return true on success */
 bool
-vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr,
-		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
+vm_try_handle_fault (struct intr_frame *f, void *addr,
+		bool user, bool write, bool not_present UNUSED) {
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
-	
 	page = spt_find_page(spt, addr);
-	if(page == NULL) return false; // 잘못된 주소
+	if(page == NULL){
+		// stack growth를 해야 하는 경우
+		if(addr + 8 >= f->rsp && addr + 256*PGSIZE >= USER_STACK && addr <= USER_STACK) {
+			vm_stack_growth(addr);
+			page = spt_find_page(spt, addr);
+		}
+		else
+			return false; // 잘못된 주소
+	}
+	
+	// read only에 write를 시도한 경우
+	if(!page->writable && write)
+		return false;
 
 	return vm_do_claim_page (page);
 }

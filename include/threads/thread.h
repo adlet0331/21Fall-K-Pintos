@@ -135,7 +135,7 @@ struct thread {
 	struct child_process *child_struct; // child로서의 정보
 	struct thread *parent; // 부모 프로세스
 	struct list fd_list; // file descriptor의 list
-	struct intr_frame *fork_frame; // fork하기 위한 intr_frame
+	struct intr_frame *syscall_frame; // syscall 인자로 전달되는 intr_frame
 	struct semaphore fork_sema; // fork하기 위한 sema
 	struct file *load_file; // 프로세스를 load하기 위한 file
 	bool stdin_close; // 프로세스에서 stdin이 close 됐는지 확인

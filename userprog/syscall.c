@@ -66,6 +66,7 @@ void
 syscall_handler (struct intr_frame *f) {
 	// TODO: Your implementation goes here.
 	uint64_t syscall_type = f->R.rax;
+	thread_current()->syscall_frame = f;
 	switch(syscall_type){
 		case SYS_HALT:
 			halt();
@@ -76,7 +77,6 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_FORK:
 			if(invalid_pointer(f->R.rdi)) exit(-1);
 			else {
-				thread_current()->fork_frame = f;
 				f->R.rax = fork(f->R.rdi);
 			}
 			break;
@@ -175,7 +175,7 @@ exit(int status) {
 pid_t
 fork(const char *thread_name) {
 	struct thread *curr = thread_current();
-	pid_t result = process_fork(thread_name, curr->fork_frame);
+	pid_t result = process_fork(thread_name, curr->syscall_frame);
 	return result;
 }
 
@@ -291,6 +291,11 @@ read(int fd, void *buffer, unsigned size) {
 		return size;
 	}
 	if(f == &std_out) return -1;
+	// writable 검사
+	// 확실하진 않지만 system call을 타면 kernel 모드여서
+	// page_fault로 가지 않기 때문에 여기서 검사함
+	struct page *page = spt_find_page(&curr->spt, buffer);
+	if((page == NULL || spt_find_page(&curr->spt, buffer)->writable == false) && !vm_try_handle_fault(curr->syscall_frame, buffer, false, true, false)) exit(-1);
 	lock_acquire(&file_lock);
 	int result = file_read(f, buffer, size);
 	lock_release(&file_lock);
