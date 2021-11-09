@@ -156,7 +156,8 @@ exit(int status) {
 		sema_up(&curr->child_struct->wait_sema);
 	}
 	// file descriptor 다 닫아주고 free 해주기
-	lock_acquire(&file_lock);
+	if(!lock_held_by_current_thread(&file_lock))
+		lock_acquire(&file_lock);
 	while(!list_empty(&curr->fd_list)) {
 		struct list_elem *e = list_pop_front(&curr->fd_list);
 		struct file_descriptor *fd = list_entry(e, struct file_descriptor, elem);
@@ -292,10 +293,8 @@ read(int fd, void *buffer, unsigned size) {
 	}
 	if(f == &std_out) return -1;
 	// writable 검사
-	// 확실하진 않지만 system call을 타면 kernel 모드여서
-	// page_fault로 가지 않기 때문에 여기서 검사함
 	struct page *page = spt_find_page(&curr->spt, buffer);
-	if((page == NULL || spt_find_page(&curr->spt, buffer)->writable == false) && !vm_try_handle_fault(curr->syscall_frame, buffer, false, true, false)) exit(-1);
+	if(page != NULL && page->writable == false) if(!vm_try_handle_fault(curr->syscall_frame, buffer, false, true, true)) exit(-1);
 	lock_acquire(&file_lock);
 	int result = file_read(f, buffer, size);
 	lock_release(&file_lock);

@@ -176,7 +176,7 @@ vm_handle_wp (struct page *page UNUSED) {
 /* Return true on success */
 bool
 vm_try_handle_fault (struct intr_frame *f, void *addr,
-		bool user, bool write, bool not_present UNUSED) {
+		bool user, bool write, bool not_present) {
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
@@ -184,7 +184,10 @@ vm_try_handle_fault (struct intr_frame *f, void *addr,
 	page = spt_find_page(spt, addr);
 	if(page == NULL){
 		// stack growth를 해야 하는 경우
-		if(addr + 8 >= f->rsp && addr + 256*PGSIZE >= USER_STACK && addr <= USER_STACK) {
+		// 스택의 내부에 있고 + 스택 크기가 1MB를 넘으면 안 됨
+		// x86-64 push 연산은 메모리 체크를 먼저 하기 때문에 rsp보다 8byte 앞에 있다
+		uintptr_t rsp = user ? f->rsp : thread_current()->syscall_frame->rsp;
+		if(addr + 8 >= rsp && addr < USER_STACK && addr + 256 * PGSIZE >= USER_STACK) {
 			vm_stack_growth(addr);
 			page = spt_find_page(spt, addr);
 		}
