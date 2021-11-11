@@ -56,6 +56,13 @@ file_backed_destroy (struct page *page) {
 void *
 do_mmap (void *addr, size_t length, int writable,
 		struct file *file, off_t offset) {
+	if (length < 0) 
+		return NULL;
+	if (length < offset) 
+		return NULL;
+	//if (addr > KERN_BASE) //문제의 그 구간. 이걸 넣으면 mmap-kernel 테케가 한무루프돔
+	//	return NULL;
+
 	size_t read_bytes = file_length(file) < length ? file_length(file) : length;
 	size_t zero_bytes = ROUND_UP(length, PGSIZE) - read_bytes;
 	while (read_bytes > 0 || zero_bytes > 0) {
