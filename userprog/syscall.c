@@ -123,6 +123,13 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_DUP2:
 			f->R.rax = dup2(f->R.rdi, f->R.rsi);
 			break;
+		case SYS_MMAP:
+			f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+			break;
+		case SYS_MUNMAP:
+			f->R.rax = filesize(f->R.rdi);
+			munmap(f->R.rdi);
+			break;
 		default:
 			thread_exit();
 	}
@@ -495,4 +502,42 @@ dup2(int oldfd, int newfd) {
 	}
 	
 	return newfd;
+}
+
+// fd 파일부터 offset 떨어진 곳부터 length만큼의 byte를 addr에 쓰기
+// 메모리는 lazy하게 할당됨
+// 성공: addr 반환, 실패: NULL 반환
+// 실패: fd 파일이 존재하지 않거나, fd 파일이 0byte이거나, length가 0인 경우
+// 실패: addr이 NULL이거나 page-align이 아니거나 해당 주소의 메모리가 이미 존재하는 경우
+void *
+mmap(void *addr, size_t length, int writable, int fd, off_t offset) {
+	struct thread *curr = thread_current();
+	struct file *file = NULL;
+	struct file_descriptor *file_descriptor;
+	if(addr == NULL || (uint64_t)addr % PGSIZE != 0 || length == 0) return NULL;
+
+	// fd 파일 검사
+	if(list_empty(&curr->fd_list)) return 0;
+	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+		file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->index == fd) {
+			file = file_descriptor->fd;
+			break;
+		}
+	}
+	if(file == NULL || file_length(file) == 0) return NULL;
+
+	// addr 주소 영역에 이미 메모리가 존재하는 경우
+	for(size_t i = 0; i < length; i += PGSIZE)
+		if(spt_find_page(&thread_current()->spt, addr + i)) return NULL;
+
+	return do_mmap(addr, length, writable, file_reopen(file), offset);
+}
+
+// addr부터 시작하는 mapping을 unmap하기
+// 모든 작성된 byte를 다시 파일에 작성하고 virtual address는 page table에서 제거
+// exit 등에 의해 프로세스가 종료될 때 실행됨
+void
+munmap(void *addr) {
+	return do_munmap(addr);
 }

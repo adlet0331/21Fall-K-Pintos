@@ -68,7 +68,12 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			return true;
 		}
 		else if (type == VM_FILE){
-			goto err;
+			struct page *pg = malloc(sizeof(struct page));
+			uninit_new(pg, upage, init, VM_FILE, aux, file_backed_initializer);
+			spt_insert_page(spt, pg);
+			pg->writable = true; // lazy_load할 때는 page에 write 해야 됨
+			pg->file_writable = writable;
+			return true;
 		}
 		else{
 			goto err;
@@ -151,6 +156,7 @@ vm_get_frame (void) {
 	void *phys_page = palloc_get_page(PAL_USER);
 	if (phys_page == NULL){
 		// TODO : user pool 가득 찼을 때 예외처리 (프레임 테이블에서 빼서 가져오기)
+		PANIC("user pool is full");
 	}
 	frame = malloc(sizeof(struct frame));
 	frame->kva = phys_page;

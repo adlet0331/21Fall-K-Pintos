@@ -26,16 +26,6 @@
 extern struct lock file_lock; // file에 접근하기 위한 lock
 extern int std_in, std_out; // stdin, stdout file descriptor를 나타내기 위한 수단
 
-// lazy_load_segment를 위한 인자
-struct lazy_load_arg {
-	struct file *file;
-	off_t ofs;
-	uint8_t *upage;
-	uint32_t read_bytes;
-	uint32_t zero_bytes;
-	bool writable;
-};
-
 // fork 에러 핸들링
 bool fork_success;
 
@@ -730,7 +720,7 @@ install_page (void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-static bool
+bool
 lazy_load_segment (struct page *page, struct lazy_load_arg *aux) {
 	/* DONE: Load the segment from the file */
 	/* DONE: This called when the first page fault occurs on address VA. */
@@ -742,10 +732,8 @@ lazy_load_segment (struct page *page, struct lazy_load_arg *aux) {
 	uint32_t read_bytes = aux->read_bytes;
 	uint32_t zero_bytes = aux->zero_bytes;
 	bool writable = aux->writable;
-	free(aux);
 
 	// file에서 frame으로 읽기
-	if (!vm_claim_page(page->va)) return false;
 	file_seek(file, ofs);
 	if(file_read(file, page->va, read_bytes) != read_bytes) {
 		vm_dealloc_page(page);
@@ -753,6 +741,15 @@ lazy_load_segment (struct page *page, struct lazy_load_arg *aux) {
 	}
 	memset(page->va + read_bytes, 0, zero_bytes);
 
+	if(aux->type == VM_FILE)
+		page->file = (struct file_page) {
+			.read_bytes = aux->read_bytes,
+			.zero_bytes = aux->zero_bytes,
+			.is_last_page = aux->is_last_page,
+			.file = aux->file
+		};
+
+	free(aux);
 	return true;
 }
 
