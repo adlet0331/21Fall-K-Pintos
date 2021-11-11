@@ -45,6 +45,8 @@ static struct frame *vm_evict_frame (void);
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
+// 처음 page lazy하게 만드는 것 (아직 가짜 페이지인 단계)
+// uninit_new : Uninit (가짜 페이지) 를 만들어줌. init - lazy_load_segment
 bool
 vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		vm_initializer *init, void *aux) {
@@ -180,6 +182,7 @@ vm_handle_wp (struct page *page UNUSED) {
 }
 
 /* Return true on success */
+// Page Fault 났을 때 옴
 bool
 vm_try_handle_fault (struct intr_frame *f, void *addr,
 		bool user, bool write, bool not_present) {
@@ -205,6 +208,7 @@ vm_try_handle_fault (struct intr_frame *f, void *addr,
 	if(!page->writable && write)
 		return false;
 
+	// Frame 할당 후 성공 여부 반환
 	return vm_do_claim_page (page);
 }
 
@@ -240,6 +244,7 @@ vm_do_claim_page (struct page *page) {
 	/* DONE: Insert page table entry to map page's VA to frame's PA. */
 	struct supplemental_page_table *sup_pt = &thread_current()->spt;
 
+	// Uninit의 swap_in 임
 	return swap_in (page, frame->kva);
 }
 

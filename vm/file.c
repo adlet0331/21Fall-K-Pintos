@@ -57,7 +57,7 @@ file_backed_destroy (struct page *page) {
 void *
 do_mmap (void *addr, size_t length, int writable,
 		struct file *file, off_t offset) {
-	size_t read_bytes = file_length(file);
+	size_t read_bytes = file_length(file) < length ? file_length(file) : length;
 	size_t zero_bytes = ROUND_UP(length, PGSIZE) - read_bytes;
 	while (read_bytes > 0 || zero_bytes > 0) {
 		/* Do calculate how to fill this page.
@@ -76,6 +76,7 @@ do_mmap (void *addr, size_t length, int writable,
 		aux->zero_bytes = page_zero_bytes;
 		aux->writable = writable;
 		aux->is_last_page = read_bytes <= page_read_bytes && zero_bytes <= page_zero_bytes;
+		aux->type = VM_FILE;
 
 		if(spt_find_page(&thread_current()->spt, addr + offset)) return NULL;
 		if (!vm_alloc_page_with_initializer (VM_FILE, addr + offset,
@@ -99,9 +100,10 @@ do_munmap (void *addr) {
 	while(page != NULL) {
 		if(page == NULL) return;
 		file_seek(file, offset);
-		file_write(file, addr, page->file.read_bytes);
+		if (page->frame != NULL)
+			file_write(file, addr, page->file.read_bytes);
 
-		bool is_last_page = page->is_last_page;
+		bool is_last_page = page->file.is_last_page;
 		spt_remove_page(spt, page);
 		hash_delete(&spt->page_table, &page->hash_elem);
 		

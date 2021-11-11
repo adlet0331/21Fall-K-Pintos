@@ -48,7 +48,6 @@ struct page {
 	struct hash_elem hash_elem;
 	bool writable;
 	bool file_writable; // file page에서 사용
-	bool is_last_page; // file page에서 사용
 
 	/* Your implementation */
 

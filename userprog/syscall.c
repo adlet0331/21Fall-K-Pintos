@@ -127,7 +127,6 @@ syscall_handler (struct intr_frame *f) {
 			f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
 			break;
 		case SYS_MUNMAP:
-			f->R.rax = filesize(f->R.rdi);
 			munmap(f->R.rdi);
 			break;
 		default:
