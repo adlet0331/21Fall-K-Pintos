@@ -66,15 +66,15 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			struct page *pg = malloc(sizeof(struct page));
 			uninit_new(pg, upage, init, VM_ANON, aux, anon_initializer);
 			spt_insert_page(spt, pg);
-			pg->writable = writable;
+			pg->original_writable = writable;
 			return true;
 		}
 		else if (type == VM_FILE){
 			struct page *pg = malloc(sizeof(struct page));
 			uninit_new(pg, upage, init, VM_FILE, aux, file_backed_initializer);
 			spt_insert_page(spt, pg);
-			pg->writable = true; // lazy_load할 때는 page에 write 해야 됨
-			pg->file_writable = writable;
+			pg->original_writable = writable; // lazy_load할 때는 page에 write 해야 됨
+			pg->file_written = false; //처음엔 false로 두지만, 나중에 write 할 때 try_handle_fault에서 true로 바꿔줌. munmap 에서 씀
 			return true;
 		}
 		else{
@@ -183,6 +183,7 @@ vm_handle_wp (struct page *page UNUSED) {
 
 /* Return true on success */
 // Page Fault 났을 때 옴
+// 현재 
 bool
 vm_try_handle_fault (struct intr_frame *f, void *addr,
 		bool user, bool write, bool not_present) {
@@ -205,7 +206,7 @@ vm_try_handle_fault (struct intr_frame *f, void *addr,
 	}
 	
 	// read only에 write를 시도한 경우
-	if(!page->writable && write)
+	if(!page->original_writable && write)
 		return false;
 
 	// Frame 할당 후 성공 여부 반환
@@ -234,17 +235,25 @@ vm_claim_page (void *va) {
 /* DONE : Claim the PAGE and set up the mmu. */
 static bool
 vm_do_claim_page (struct page *page) {
-	struct frame *frame = vm_get_frame ();
+	struct frame *frame = page->frame;
+	if (page->frame == NULL){ //처음 page fault가 불렸을 때 (read 나 write 로)
+		frame = vm_get_frame ();
 
-	/* Set links */
-	frame->page = page;
-	page->frame = frame;
-	if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))
-		return false;
-	/* DONE: Insert page table entry to map page's VA to frame's PA. */
-	struct supplemental_page_table *sup_pt = &thread_current()->spt;
+		/* Set links */
+		frame->page = page;
+		page->frame = frame;
 
-	// Uninit의 swap_in 임
+		//pml4 매핑 처음에는 read만 가능하게 하기. write 하려고 하면 또 page_fault 걸려서 아래로 갈 것
+		if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, false)) 
+			return false;
+	}
+	else { //read n번 불린 후 write가 불렸을 때
+		if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->original_writable))
+			return false;
+		page->file_written = true;
+	}
+
+	// Uninit의 swap_in (uninit_initialize) 임 - 여기서 page initializer로 초기화 시켜준 후 lazy_load_segment 해줌
 	return swap_in (page, frame->kva);
 }
 
@@ -278,7 +287,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 	hash_first(&i, &src->page_table);
 	while(hash_next(&i)) {
 		struct page *page = hash_entry(hash_cur(&i), struct page, hash_elem);
-		if(!vm_alloc_page(VM_ANON, page->va, page->writable)) return false;
+		if(!vm_alloc_page(VM_ANON, page->va, page->original_writable)) return false;
 		vm_claim_page(page->va);
 		struct page *new_page = spt_find_page(dst, page->va);
 		if(new_page == NULL) return false;

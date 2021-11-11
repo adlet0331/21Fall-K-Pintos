@@ -300,7 +300,7 @@ read(int fd, void *buffer, unsigned size) {
 	if(f == &std_out) return -1;
 	// writable 검사
 	struct page *page = spt_find_page(&curr->spt, buffer);
-	if(page != NULL && page->writable == false) if(!vm_try_handle_fault(curr->syscall_frame, buffer, false, true, true)) exit(-1);
+	if(page != NULL && page->original_writable == false) if(!vm_try_handle_fault(curr->syscall_frame, buffer, false, true, true)) exit(-1);
 	lock_acquire(&file_lock);
 	int result = file_read(f, buffer, size);
 	lock_release(&file_lock);

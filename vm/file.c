@@ -27,7 +27,6 @@ bool
 file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	page->operations = &file_ops;
-	page->writable = page->file_writable;
 }
 
 /* Swap in the page by read contents from the file. */
@@ -100,7 +99,7 @@ do_munmap (void *addr) {
 	while(page != NULL) {
 		if(page == NULL) return;
 		file_seek(file, offset);
-		if (page->frame != NULL)
+		if (page->frame != NULL && page->file_written)
 			file_write(file, addr, page->file.read_bytes);
 
 		bool is_last_page = page->file.is_last_page;

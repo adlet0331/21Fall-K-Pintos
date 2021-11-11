@@ -46,8 +46,8 @@ struct page {
 	void *va;              /* Address in terms of user space */
 	struct frame *frame;   /* Back reference for frame */
 	struct hash_elem hash_elem;
-	bool writable;
-	bool file_writable; // file page에서 사용
+	bool original_writable;		// 처음 페이지 만들때 설정된 writable
+	bool file_written; // file page에서 사용
 
 	/* Your implementation */
 

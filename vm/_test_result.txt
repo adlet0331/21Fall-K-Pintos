@@ -71,9 +71,9 @@ pass tests/vm/pt-write-code2
 pass tests/vm/pt-grow-stk-sc
 pass tests/vm/page-linear
 pass tests/vm/page-parallel
-FAIL tests/vm/page-merge-seq
-FAIL tests/vm/page-merge-par
-FAIL tests/vm/page-merge-stk
+pass tests/vm/page-merge-seq
+pass tests/vm/page-merge-par
+pass tests/vm/page-merge-stk
 FAIL tests/vm/page-merge-mm
 pass tests/vm/page-shuffle
 pass tests/vm/mmap-read
@@ -82,11 +82,11 @@ pass tests/vm/mmap-unmap
 pass tests/vm/mmap-overlap
 pass tests/vm/mmap-twice
 pass tests/vm/mmap-write
-FAIL tests/vm/mmap-ro
+pass tests/vm/mmap-ro
 FAIL tests/vm/mmap-exit
 pass tests/vm/mmap-shuffle
 pass tests/vm/mmap-bad-fd
-FAIL tests/vm/mmap-clean
+pass tests/vm/mmap-clean
 pass tests/vm/mmap-inherit
 pass tests/vm/mmap-misalign
 pass tests/vm/mmap-null
@@ -139,4 +139,3 @@ pass tests/threads/priority-sema
 pass tests/threads/priority-condvar
 pass tests/threads/priority-donate-chain
 FAIL tests/vm/cow/cow-simple
-14 of 141 tests failed.
