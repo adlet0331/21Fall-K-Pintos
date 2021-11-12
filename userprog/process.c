@@ -746,7 +746,8 @@ lazy_load_segment (struct page *page, struct lazy_load_arg *aux) {
 			.read_bytes = aux->read_bytes,
 			.zero_bytes = aux->zero_bytes,
 			.is_last_page = aux->is_last_page,
-			.file = aux->file
+			.file = aux->file,
+			.offset = ofs
 		};
 
 	free(aux);

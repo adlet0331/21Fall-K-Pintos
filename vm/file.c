@@ -56,10 +56,10 @@ file_backed_destroy (struct page *page) {
 /* Do the mmap */
 void *
 do_mmap (void *addr, size_t length, int writable,
-		struct file *file, off_t offset) {
-	void *original_addr = addr;
+		struct file *file, off_t file_offset) {
 	size_t read_bytes = file_length(file) < length ? file_length(file) : length;
 	size_t zero_bytes = ROUND_UP(length, PGSIZE) - read_bytes;
+	off_t va_offset = 0;
 	while (read_bytes > 0 || zero_bytes > 0) {
 		/* Do calculate how to fill this page.
 		 * We will read PAGE_READ_BYTES bytes from FILE
@@ -71,7 +71,7 @@ do_mmap (void *addr, size_t length, int writable,
 		// 인자 설정
 		struct lazy_load_arg *aux = malloc(sizeof(struct lazy_load_arg));
 		aux->file = file;
-		aux->ofs = offset;
+		aux->ofs = file_offset + va_offset;
 		aux->upage = addr;
 		aux->read_bytes = page_read_bytes;
 		aux->zero_bytes = page_zero_bytes;
@@ -79,16 +79,16 @@ do_mmap (void *addr, size_t length, int writable,
 		aux->is_last_page = read_bytes <= page_read_bytes && zero_bytes <= page_zero_bytes;
 		aux->type = VM_FILE;
 
-		if(spt_find_page(&thread_current()->spt, addr + offset)) return NULL;
-		if (!vm_alloc_page_with_initializer (VM_FILE, addr + offset,
+		if(spt_find_page(&thread_current()->spt, addr + va_offset)) return NULL;
+		if (!vm_alloc_page_with_initializer (VM_FILE, addr + va_offset,
 					writable, lazy_load_segment, aux))
 			return NULL;
 
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
-		offset += PGSIZE;
+		va_offset += PGSIZE;
 	}
-	for(int i=0; i<100; i++) if(mmap_list[i] == NULL) { mmap_list[i] = original_addr; break; }
+	for(int i=0; i<100; i++) if(mmap_list[i] == NULL) { mmap_list[i] = addr; break; }
 	return addr;
 }
 
@@ -99,14 +99,13 @@ do_munmap (void *addr) {
 	struct supplemental_page_table *spt = &thread_current()->spt;
 	struct page *page = NULL;
 	struct file *file = NULL;
-	off_t offset = 0;
 	while(true) {
 		page = spt_find_page(spt, addr);
 		if(page == NULL) break;
 
 		if(page->operations->type == VM_FILE) {
 			file = page->file.file;
-			file_seek(file, offset);
+			file_seek(file, page->file.offset);
 			if (page->frame != NULL && page->file_written)
 				file_write(file, addr, page->file.read_bytes);
 		}
@@ -117,7 +116,6 @@ do_munmap (void *addr) {
 		
 		if(is_last_page) break;;
 		addr += PGSIZE;
-		offset += PGSIZE;
 		page = spt_find_page(spt, addr);
 	}
 }

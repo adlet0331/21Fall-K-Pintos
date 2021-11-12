@@ -514,7 +514,7 @@ mmap(void *addr, size_t length, int writable, int fd, off_t offset) {
 	struct file *file = NULL;
 	struct file_descriptor *file_descriptor;
 	if(addr == NULL || (uint64_t)addr % PGSIZE != 0 || length <= 0) return NULL;
-	if (length < offset || addr + length >= KERN_BASE) return NULL;
+	if (addr + length >= KERN_BASE || addr >= KERN_BASE || length >= KERN_BASE) return NULL;
 
 	// fd 파일 검사
 	if(list_empty(&curr->fd_list)) return NULL;
