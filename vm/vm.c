@@ -307,6 +307,8 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	for(int i=0; i<100; i++) if(mmap_list[i]) do_munmap(mmap_list[i]);
+
 	struct hash_iterator i;
 	struct page *pg;
 	while (1){

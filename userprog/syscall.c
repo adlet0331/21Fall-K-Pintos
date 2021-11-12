@@ -513,10 +513,11 @@ mmap(void *addr, size_t length, int writable, int fd, off_t offset) {
 	struct thread *curr = thread_current();
 	struct file *file = NULL;
 	struct file_descriptor *file_descriptor;
-	if(addr == NULL || (uint64_t)addr % PGSIZE != 0 || length == 0) return NULL;
+	if(addr == NULL || (uint64_t)addr % PGSIZE != 0 || length <= 0) return NULL;
+	if (length < offset || addr + length >= KERN_BASE) return NULL;
 
 	// fd 파일 검사
-	if(list_empty(&curr->fd_list)) return 0;
+	if(list_empty(&curr->fd_list)) return NULL;
 	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
 		file_descriptor = list_entry(e, struct file_descriptor, elem);
 		if(file_descriptor->index == fd) {

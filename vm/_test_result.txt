@@ -83,7 +83,7 @@ pass tests/vm/mmap-overlap
 pass tests/vm/mmap-twice
 pass tests/vm/mmap-write
 pass tests/vm/mmap-ro
-FAIL tests/vm/mmap-exit
+pass tests/vm/mmap-exit
 pass tests/vm/mmap-shuffle
 pass tests/vm/mmap-bad-fd
 pass tests/vm/mmap-clean
@@ -139,4 +139,4 @@ pass tests/threads/priority-sema
 pass tests/threads/priority-condvar
 pass tests/threads/priority-donate-chain
 FAIL tests/vm/cow/cow-simple
-8 of 141 tests failed.
+7 of 141 tests failed.

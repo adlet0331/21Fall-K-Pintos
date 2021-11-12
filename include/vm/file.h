@@ -6,6 +6,10 @@
 struct page;
 enum vm_type;
 
+// mmap 했던 주소들을 모아놓음
+// 나중에 exit할 때 암시적으로 모두 munmap해야 함
+void *mmap_list[100];
+
 struct file_page {
 	uint32_t read_bytes;
 	uint32_t zero_bytes;

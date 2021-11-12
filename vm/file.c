@@ -20,6 +20,7 @@ static const struct page_operations file_ops = {
 /* The initializer of file vm */
 void
 vm_file_init (void) {
+	for(int i=0; i<100; i++) mmap_list[i] = NULL;
 }
 
 /* Initialize the file backed page */
@@ -56,13 +57,7 @@ file_backed_destroy (struct page *page) {
 void *
 do_mmap (void *addr, size_t length, int writable,
 		struct file *file, off_t offset) {
-	if (length < 0) 
-		return NULL;
-	if (length < offset) 
-		return NULL;
-	//if (addr > KERN_BASE) //문제의 그 구간. 이걸 넣으면 mmap-kernel 테케가 한무루프돔
-	//	return NULL;
-
+	void *original_addr = addr;
 	size_t read_bytes = file_length(file) < length ? file_length(file) : length;
 	size_t zero_bytes = ROUND_UP(length, PGSIZE) - read_bytes;
 	while (read_bytes > 0 || zero_bytes > 0) {
@@ -93,27 +88,34 @@ do_mmap (void *addr, size_t length, int writable,
 		zero_bytes -= page_zero_bytes;
 		offset += PGSIZE;
 	}
+	for(int i=0; i<100; i++) if(mmap_list[i] == NULL) { mmap_list[i] = original_addr; break; }
 	return addr;
 }
 
 /* Do the munmap */
 void
 do_munmap (void *addr) {
+	for(int i=0; i<100; i++) if(mmap_list[i] == addr) mmap_list[i] = NULL;
 	struct supplemental_page_table *spt = &thread_current()->spt;
-	struct page *page = spt_find_page(spt, addr);
-	struct file *file = page->file.file;
+	struct page *page = NULL;
+	struct file *file = NULL;
 	off_t offset = 0;
-	while(page != NULL) {
-		if(page == NULL) return;
-		file_seek(file, offset);
-		if (page->frame != NULL && page->file_written)
-			file_write(file, addr, page->file.read_bytes);
+	while(true) {
+		page = spt_find_page(spt, addr);
+		if(page == NULL) break;
+
+		if(page->operations->type == VM_FILE) {
+			file = page->file.file;
+			file_seek(file, offset);
+			if (page->frame != NULL && page->file_written)
+				file_write(file, addr, page->file.read_bytes);
+		}
 
 		bool is_last_page = page->file.is_last_page;
 		spt_remove_page(spt, page);
 		hash_delete(&spt->page_table, &page->hash_elem);
 		
-		if(is_last_page) return;
+		if(is_last_page) break;;
 		addr += PGSIZE;
 		offset += PGSIZE;
 		page = spt_find_page(spt, addr);
