@@ -2,6 +2,7 @@
 
 #include "lib/string.h"
 #include "lib/kernel/hash.h"
+#include "devices/disk.h"
 #include "threads/malloc.h"
 #include "threads/vaddr.h"
 #include "threads/mmu.h"
@@ -21,6 +22,8 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	// TODO: Virtual Memory 초기화 - 쓰레드 호출 전
+	// frame 리스트 초기화
+	list_init(&frame_list);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -158,7 +161,10 @@ vm_get_frame (void) {
 	void *phys_page = palloc_get_page(PAL_USER);
 	if (phys_page == NULL){
 		// TODO : user pool 가득 찼을 때 예외처리 (프레임 테이블에서 빼서 가져오기)
-		PANIC("user pool is full");
+		// 프레임 하나 정해서 swap_out 하기
+		struct list_elem *e = list_pop_front(&frame_list);
+		struct frame *victim = list_entry(e, struct frame, elem);
+		swap_out(victim->page);
 	}
 	frame = malloc(sizeof(struct frame));
 	frame->kva = phys_page;
@@ -236,8 +242,11 @@ vm_claim_page (void *va) {
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = page->frame;
+	bool asdf;
 	if (page->frame == NULL){ //처음 page fault가 불렸을 때 (read 나 write 로)
 		frame = vm_get_frame ();
+		
+		list_push_back(&frame_list, &frame->elem);
 
 		/* Set links */
 		frame->page = page;
@@ -253,7 +262,11 @@ vm_do_claim_page (struct page *page) {
 		page->file_written = true;
 	}
 
+	// page가 swapped됐다면: swap_in
+	//        swapped되지 않았다면: 그냥 끝
+
 	// Uninit의 swap_in (uninit_initialize) 임 - 여기서 page initializer로 초기화 시켜준 후 lazy_load_segment 해줌
+	// anon, file의 경우 anon_swap_in, file_swap_in 실행
 	return swap_in (page, frame->kva);
 }
 

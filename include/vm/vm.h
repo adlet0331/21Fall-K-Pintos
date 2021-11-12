@@ -46,8 +46,9 @@ struct page {
 	void *va;              /* Address in terms of user space */
 	struct frame *frame;   /* Back reference for frame */
 	struct hash_elem hash_elem;
-	bool original_writable;		// 처음 페이지 만들때 설정된 writable
+	bool original_writable;	// 처음 페이지 만들때 설정된 writable
 	bool file_written; // file page에서 사용
+	bool swapped; // swap_out이 됐는지 판별
 
 	/* Your implementation */
 
@@ -67,6 +68,7 @@ struct page {
 struct frame {
 	void *kva;
 	struct page *page;
+	struct list_elem elem;
 };
 
 /* The function table for page operations.
@@ -91,6 +93,8 @@ struct page_operations {
 struct supplemental_page_table {
 	struct hash page_table;
 };
+
+struct list frame_list;
 
 #include "threads/thread.h"
 void supplemental_page_table_init (struct supplemental_page_table *spt);

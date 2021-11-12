@@ -22,7 +22,7 @@ static const struct page_operations anon_ops = {
 void
 vm_anon_init (void) {
 	/* TODO: Set up the swap_disk. */
-	swap_disk = NULL;
+	swap_disk = disk_get(1, 1);
 }
 
 /* Initialize the file mapping */
@@ -39,13 +39,17 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 }
 
 /* TODO : Swap in the page by read contents from the swap disk. */
+// 디스크 -> 메모리
+// page가 디스크에 존재하는 상태(swap-out이 된 상태)면 다시 메모리에 복사해 오기
+//                존재하지 않는 상태면 true 반환
 static bool
 anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
-	return true;
+	if(!page->swapped) return true;
 }
 
 /* TODO : Swap out the page by writing contents to the swap disk. */
+// 메모리 -> 디스크
 static bool
 anon_swap_out (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
