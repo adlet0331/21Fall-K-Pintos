@@ -165,6 +165,7 @@ vm_get_frame (void) {
 		struct list_elem *e = list_pop_front(&frame_list);
 		struct frame *victim = list_entry(e, struct frame, elem);
 		swap_out(victim->page);
+		phys_page = palloc_get_page(PAL_USER);
 	}
 	frame = malloc(sizeof(struct frame));
 	frame->kva = phys_page;
@@ -242,7 +243,6 @@ vm_claim_page (void *va) {
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = page->frame;
-	bool asdf;
 	if (page->frame == NULL){ //처음 page fault가 불렸을 때 (read 나 write 로)
 		frame = vm_get_frame ();
 		

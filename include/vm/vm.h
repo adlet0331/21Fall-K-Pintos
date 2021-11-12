@@ -49,6 +49,7 @@ struct page {
 	bool original_writable;	// 처음 페이지 만들때 설정된 writable
 	bool file_written; // file page에서 사용
 	bool swapped; // swap_out이 됐는지 판별
+	uint32_t disk_sector; // anon의 swap에서 사용
 
 	/* Your implementation */
 
@@ -95,6 +96,7 @@ struct supplemental_page_table {
 };
 
 struct list frame_list;
+bool *disk_sector_list; // i번째 index: (i*8) sector가 사용되었는지 체크
 
 #include "threads/thread.h"
 void supplemental_page_table_init (struct supplemental_page_table *spt);
