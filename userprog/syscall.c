@@ -513,8 +513,10 @@ mmap(void *addr, size_t length, int writable, int fd, off_t offset) {
 	struct thread *curr = thread_current();
 	struct file *file = NULL;
 	struct file_descriptor *file_descriptor;
-	if(addr == NULL || (uint64_t)addr % PGSIZE != 0 || length <= 0) return NULL;
-	if (addr + length >= KERN_BASE || addr >= KERN_BASE || length >= KERN_BASE) return NULL;
+	if(addr == NULL || (uint64_t)addr % PGSIZE != 0 || length <= 0 || offset % PGSIZE != 0) 
+		return NULL;
+	if (is_kernel_vaddr(addr) || addr == 0 || length > KERN_BASE)
+		return NULL;
 
 	// fd 파일 검사
 	if(list_empty(&curr->fd_list)) return NULL;
@@ -525,7 +527,10 @@ mmap(void *addr, size_t length, int writable, int fd, off_t offset) {
 			break;
 		}
 	}
-	if(file == NULL || file_length(file) == 0) return NULL;
+	if(file == NULL || file_length(file) == 0) 
+		return NULL;
+	if(file_length(file) < offset) 
+		return NULL;
 
 	// addr 주소 영역에 이미 메모리가 존재하는 경우
 	for(size_t i = 0; i < length; i += PGSIZE)
