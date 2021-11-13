@@ -156,11 +156,9 @@ exit(int status) {
 	// 넘겨받은 exit status 출력
 	curr->tf.R.rax = status;
 	printf("%s: exit(%d)\n", curr->name, status);
-	// 부모의 wait를 위해 sema_up
-	if(curr->parent != NULL) {
+	// parent에 정보 저장
+	if(curr->parent != NULL)
 		curr->child_struct->exit_status = status;
-		sema_up(&curr->child_struct->wait_sema);
-	}
 	// file descriptor 다 닫아주고 free 해주기
 	if(!lock_held_by_current_thread(&file_lock))
 		lock_acquire(&file_lock);

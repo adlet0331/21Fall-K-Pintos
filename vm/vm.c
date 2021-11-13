@@ -294,6 +294,7 @@ supplemental_page_table_init (struct supplemental_page_table *spt) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst,
 		struct supplemental_page_table *src) {
+	// child에서 실행됨
 	// COW 언젠가 해야 됨
 	// 일단은 모든 page를 복사해서 붙임
 	struct hash_iterator i;
@@ -320,7 +321,8 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-	for(int i=0; i<100; i++) if(mmap_list[i]) do_munmap(mmap_list[i]);
+	struct thread *curr = thread_current();
+	for(int i=0; i<100; i++) if(curr->mmap_list[i]) do_munmap(curr->mmap_list[i]);
 
 	struct hash_iterator i;
 	struct page *pg;

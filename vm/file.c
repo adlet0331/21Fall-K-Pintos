@@ -20,7 +20,6 @@ static const struct page_operations file_ops = {
 /* The initializer of file vm */
 void
 vm_file_init (void) {
-	for(int i=0; i<100; i++) mmap_list[i] = NULL;
 }
 
 /* Initialize the file backed page */
@@ -75,6 +74,7 @@ file_backed_destroy (struct page *page) {
 void *
 do_mmap (void *addr, size_t length, int writable,
 		struct file *file, off_t file_offset) {
+	struct thread *curr = thread_current();
 	size_t read_bytes = file_length(file) < length ? file_length(file) : length;
 	size_t zero_bytes = ROUND_UP(length, PGSIZE) - read_bytes;
 	off_t va_offset = 0;
@@ -97,7 +97,7 @@ do_mmap (void *addr, size_t length, int writable,
 		aux->is_last_page = read_bytes <= page_read_bytes && zero_bytes <= page_zero_bytes;
 		aux->type = VM_FILE;
 
-		if(spt_find_page(&thread_current()->spt, addr + va_offset)) return NULL;
+		if(spt_find_page(&curr->spt, addr + va_offset)) return NULL;
 		if (!vm_alloc_page_with_initializer (VM_FILE, addr + va_offset,
 					writable, lazy_load_segment, aux))
 			return NULL;
@@ -106,34 +106,36 @@ do_mmap (void *addr, size_t length, int writable,
 		zero_bytes -= page_zero_bytes;
 		va_offset += PGSIZE;
 	}
-	for(int i=0; i<100; i++) if(mmap_list[i] == NULL) { mmap_list[i] = addr; break; }
+	for(int i=0; i<100; i++) if(curr->mmap_list[i] == NULL) { curr->mmap_list[i] = addr; break; }
 	return addr;
 }
 
 /* Do the munmap */
 void
 do_munmap (void *addr) {
-	for(int i=0; i<100; i++) if(mmap_list[i] == addr) mmap_list[i] = NULL;
-	struct supplemental_page_table *spt = &thread_current()->spt;
+	struct thread *curr = thread_current();
+	for(int i=0; i<100; i++) if(curr->mmap_list[i] == addr) curr->mmap_list[i] = NULL;
+	struct supplemental_page_table *spt = &curr->spt;
 	struct page *page = NULL;
 	struct file *file = NULL;
 	while(true) {
 		page = spt_find_page(spt, addr);
 		if(page == NULL) break;
 
-		if(page->operations->type == VM_FILE) {
+		if(page->operations->type == VM_FILE && page->swapped == false) {
 			file = page->file.file;
 			file_seek(file, page->file.offset);
 			if (page->frame != NULL && page->file_written)
 				file_write(file, addr, page->file.read_bytes);
-		}
 
-		bool is_last_page = page->file.is_last_page;
+			bool is_last_page = page->file.is_last_page;
+			spt_remove_page(spt, page);
+			hash_delete(&spt->page_table, &page->hash_elem);
+			if(is_last_page) break;
+		}
 		spt_remove_page(spt, page);
 		hash_delete(&spt->page_table, &page->hash_elem);
 		
-		if(is_last_page) break;;
 		addr += PGSIZE;
-		page = spt_find_page(spt, addr);
 	}
 }

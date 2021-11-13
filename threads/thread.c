@@ -223,6 +223,9 @@ thread_create (const char *name, int priority,
 	list_push_back(&t->fd_list, &stdin_fd->elem);
 	list_push_back(&t->fd_list, &stdout_fd->elem);
 
+	// mmap_list 초기화
+	for(int i=0; i<100; i++) t->mmap_list[i] = NULL;
+
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t) kernel_thread;
@@ -323,6 +326,12 @@ thread_exit (void) {
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable ();
+	// 부모의 wait를 위해 sema_up
+	// process_exit 안의 munmap 등에서 시간을 많이 쓰기 때문에
+	// synch 문제를 해결하기 위해 sema_up을 여기서 함
+	struct thread *curr = thread_current();
+	if(curr->parent != NULL)
+		sema_up(&curr->child_struct->wait_sema);
 	do_schedule (THREAD_DYING);
 	NOT_REACHED ();
 }

@@ -140,6 +140,10 @@ struct thread {
 	struct file *load_file; // 프로세스를 load하기 위한 file
 	bool stdin_close; // 프로세스에서 stdin이 close 됐는지 확인
 	bool stdout_close; // 프로세스에서 stdout이 close 됐는지 확인
+
+	// mmap 했던 주소들을 모아놓음
+	// 나중에 exit할 때 암시적으로 모두 munmap해야 함
+	void *mmap_list[100];
 };
 
 /* If false (default), use round-robin scheduler.
