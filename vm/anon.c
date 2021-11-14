@@ -21,7 +21,7 @@ static const struct page_operations anon_ops = {
 /* Initialize the data for anonymous pages */
 void
 vm_anon_init (void) {
-	/* TODO: Set up the swap_disk. */
+	/* DONE: Set up the swap_disk. */
 	swap_disk = disk_get(1, 1);
 	disk_sector_list = malloc(disk_size(swap_disk) / 8);
 	for(int i=0; i<disk_size(swap_disk) / 8; i++) disk_sector_list[i] = false;
@@ -40,7 +40,7 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	return true;
 }
 
-/* TODO : Swap in the page by read contents from the swap disk. */
+/* DONE : Swap in the page by read contents from the swap disk. */
 // 디스크 -> 메모리
 // page가 디스크에 존재하는 상태(swap-out이 된 상태)면 다시 메모리에 복사해 오기
 //                존재하지 않는 상태면 true 반환
@@ -56,7 +56,7 @@ anon_swap_in (struct page *page, void *kva) {
 	return true;
 }
 
-/* TODO : Swap out the page by writing contents to the swap disk. */
+/* DONE : Swap out the page by writing contents to the swap disk. */
 // 메모리 -> 디스크
 static bool
 anon_swap_out (struct page *page) {
@@ -73,7 +73,7 @@ anon_swap_out (struct page *page) {
 	return true;
 }
 
-/* TODO : Destroy the anonymous page. PAGE will be freed by the caller. */
+/* DONE : Destroy the anonymous page. PAGE will be freed by the caller. */
 static void
 anon_destroy (struct page *page) {
 	pml4_clear_page(thread_current()->pml4, page->va);

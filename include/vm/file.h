@@ -12,6 +12,7 @@ struct file_page {
 	bool is_last_page;
 	struct file *file;
 	off_t offset;
+	void *mmap_addr; // COW를 위해 추가
 };
 
 void vm_file_init (void);
