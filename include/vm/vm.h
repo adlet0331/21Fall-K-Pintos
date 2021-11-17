@@ -74,9 +74,12 @@ struct page {
 /* The representation of "frame" */
 struct frame {
 	void *kva;
-	struct page *page;
 	struct list_elem elem;
-	// write 요청이 들어오면 다시 load 해주기 위해 만들어둔 list
+	// 처음 frame을 생성한 page가 page에 저장되고, forked된 page는 forked_page_list에 저장됨
+	// 어느 하나가 write하고자 하면 새로운 frame을 할당하러 감
+	// page가 write하고자 함: list에서 하나 뽑아서 page에 할당해 놓음
+	// list 원소 중 하나가 write하고자 함: list에서 원소 제거
+	struct page *page;
 	struct list forked_page_list;
 };
 
