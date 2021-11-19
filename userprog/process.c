@@ -110,7 +110,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	void *newpage;
 	bool writable;
 
-	/* 1. DONE: If the parent_page is kernel page, then return immediately. */
+	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
 	// 커널 pte면 아무것도 하지 않음
 	if(is_kern_pte(pte)) {
 		return true;
@@ -119,14 +119,14 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page (parent->pml4, va);
 
-	/* 3. DONE: Allocate new PAL_USER page for the child and set result to
-	 *    DONE: NEWPAGE. */
+	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
+	 *    TODO: NEWPAGE. */
 	// 새로운 page 얻기
 	newpage = palloc_get_page(PAL_USER);
 
-	/* 4. DONE: Duplicate parent's page to the new page and
-	 *    DONE: check whether parent's page is writable or not (set WRITABLE
-	 *    DONE: according to the result). */
+	/* 4. TODO: Duplicate parent's page to the new page and
+	 *    TODO: check whether parent's page is writable or not (set WRITABLE
+	 *    TODO: according to the result). */
 	// newpage에 parent_page 내용을 복사하기
 	memcpy(newpage, parent_page, PGSIZE);
 	writable = is_writable((uint64_t *)pte);
@@ -134,7 +134,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
-		/* 6. DONE: if fail to insert page, do error handling. */
+		/* 6. TODO: if fail to insert page, do error handling. */
 		// page 복사에 실패하면 다시 free해주기
 		palloc_free_page(newpage);
 		return false;
@@ -153,7 +153,7 @@ __do_fork (void *aux) {
 	struct intr_frame if_;
 	struct thread *parent = thread_current()->parent;
 	struct thread *current = thread_current ();
-	/* DONE: somehow pass the parent_if. (i.e. process_fork()'s if_) */
+	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	// 부모의 intr_frame을 aux로 넘겨줌
 	struct intr_frame *parent_if = (struct intr_frame *)aux;
 	bool succ = true;
@@ -178,11 +178,11 @@ __do_fork (void *aux) {
 		goto error;
 #endif
 
-	/* DONE: Your code goes here.
-	 * DONE: Hint) To duplicate the file object, use `file_duplicate`
-	 * DONE:       in include/filesys/file.h. Note that parent should not return
-	 * DONE:       from the fork() until this function successfully duplicates
-	 * DONE:       the resources of parent.*/
+	/* TODO: Your code goes here.
+	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
+	 * TODO:       in include/filesys/file.h. Note that parent should not return
+	 * TODO:       from the fork() until this function successfully duplicates
+	 * TODO:       the resources of parent.*/
 	// thread_create? 에서 만들었던 fd_list를 전부 지운다
 	while(!list_empty(&current->fd_list)) {
 		struct list_elem *e = list_pop_front(&current->fd_list);
@@ -313,10 +313,10 @@ process_wait (tid_t child_tid) {
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
-	/* DONE: Your code goes here.
-	 * DONE: Implement process termination message (see
-	 * DONE: project2/process_termination.html).
-	 * DONE: We recommend you to implement process resource cleanup here. */
+	/* TODO: Your code goes here.
+	 * TODO: Implement process termination message (see
+	 * TODO: project2/process_termination.html).
+	 * TODO: We recommend you to implement process resource cleanup here. */
 
 	process_cleanup ();
 }
@@ -520,8 +520,8 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
-	/* DONE: Your code goes here.
-	 * DONE: Implement argument passing (see project2/argument_passing.html). */
+	/* TODO: Your code goes here.
+	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	
 	/* argument passing 관련 */
 	// file name이랑 arguments 파싱 후 레지스터에 저장
@@ -719,7 +719,7 @@ install_page (void *upage, void *kpage, bool writable) {
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
-// anon OR file page 실제로 로드 해주기
+// anon 아니면 file page 실제로 로드 해주기
 bool
 lazy_load_segment (struct page *page, struct lazy_load_arg *aux) {
 	/* DONE: Load the segment from the file */
@@ -747,8 +747,7 @@ lazy_load_segment (struct page *page, struct lazy_load_arg *aux) {
 			.zero_bytes = aux->zero_bytes,
 			.is_last_page = aux->is_last_page,
 			.file = aux->file,
-			.offset = ofs,
-			.mmap_addr = aux->upage // fork lazy load를 위해 추가
+			.offset = ofs
 		};
 
 	free(aux);

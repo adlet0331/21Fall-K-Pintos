@@ -408,7 +408,7 @@ thread_donate_priority (struct thread *to) {
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED) {
-	/* DONE: Your implementation goes here */
+	/* TODO: Your implementation goes here */
 	// mlfqs 관련
 	enum intr_level old_level;
 
@@ -420,7 +420,7 @@ thread_set_nice (int nice UNUSED) {
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) {
-	/* DONE: Your implementation goes here */
+	/* TODO: Your implementation goes here */
 	// mlfqs 관련
 	enum intr_level old_level;
 	old_level = intr_disable ();
@@ -440,7 +440,7 @@ thread_get_load_avg(void){
 // mlfqs 관련
 void
 thread_update_load_avg (void) {
-	/* DONE: Your implementation goes here */
+	/* TODO: Your implementation goes here */
 	//int load_avg = (59/60) * load_avg + (1/60) * ready_threads;
 	enum intr_level old_level;
 	old_level = intr_disable ();
@@ -483,7 +483,7 @@ thread_update_load_avg (void) {
 // mlfqs 관련
 int
 thread_get_recent_cpu () {
-	/* DONE: Your implementation goes here */
+	/* TODO: Your implementation goes here */
 	return fp_round_int(fp_multiply_fp(thread_current ()->recent_cpu, int_to_fp(100)));
 }
 

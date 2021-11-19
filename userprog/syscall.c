@@ -64,7 +64,7 @@ syscall_init (void) {
 // 시스템 콜 핸들러. 받고 어셈블리 (%rax, %rdi, %rsi) 처리해주는 곳
 void
 syscall_handler (struct intr_frame *f) {
-	// DONE: Your implementation goes here.
+	// TODO: Your implementation goes here.
 	uint64_t syscall_type = f->R.rax;
 	thread_current()->syscall_frame = f;
 	switch(syscall_type){
