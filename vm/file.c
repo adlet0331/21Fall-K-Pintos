@@ -64,27 +64,9 @@ static void
 file_backed_destroy (struct page *page) {
 	pml4_clear_page(thread_current()->pml4, page->va);
 	if(page->frame) {
-		struct frame *frame = page->frame;
-
-		// 해당 frame을 사용하는 page가 자기뿐이면 frame 제거
-		if(list_empty(&frame->forked_page_list)) {
-			ASSERT(frame->page == page);
-			palloc_free_page(page->frame->kva);
-			list_remove(&page->frame->elem);
-			free(page->frame);
-		}
-
-		// frame->page를 새로운 것으로 설정
-		else if(frame->page == page) {
-			struct list_elem *e = list_front(&frame->forked_page_list);
-			struct page *page = list_entry(e, struct page, list_elem);
-			frame->page = page;
-		}
-
-		// frame->forked_page_list에서 자신 제거
-		else {
-			list_remove(&page->list_elem);
-		}
+		palloc_free_page(page->frame->kva);
+		list_remove(&page->frame->elem);
+		free(page->frame);
 	}
 }
 

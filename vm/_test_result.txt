@@ -87,7 +87,7 @@ pass tests/vm/mmap-exit
 pass tests/vm/mmap-shuffle
 pass tests/vm/mmap-bad-fd
 pass tests/vm/mmap-clean
-pass tests/vm/mmap-inherit
+FAIL tests/vm/mmap-inherit
 pass tests/vm/mmap-misalign
 pass tests/vm/mmap-null
 pass tests/vm/mmap-over-code
@@ -139,4 +139,32 @@ pass tests/threads/priority-sema
 pass tests/threads/priority-condvar
 pass tests/threads/priority-donate-chain
 pass tests/vm/cow/cow-simple
-All 141 tests passed.
+1 of 141 tests failed.
+
+fork를 사용하는 테케: 총 25+1개
+tests/userprog/fork-once
+tests/userprog/fork-multiple
+tests/userprog/fork-recursive
+tests/userprog/fork-read
+tests/userprog/fork-close
+tests/userprog/fork-boundary
+tests/userprog/exec-boundary
+tests/userprog/exec-read
+tests/userprog/wait-simple
+tests/userprog/wait-twice
+tests/userprog/wait-killed
+tests/userprog/multi-recurse
+tests/userprog/multi-child-fd
+tests/userprog/rox-child
+tests/userprog/rox-multichild
+tests/vm/page-parallel
+tests/vm/page-merge-seq
+tests/vm/page-merge-par
+tests/vm/page-merge-stk
+tests/vm/page-merge-mm
+tests/vm/mmap-exit
+tests/vm/mmap-inherit
+tests/vm/swap-fork
+tests/filesys/base/syn-read
+tests/filesys/base/syn-write
+tests/vm/cow/cow-simple
