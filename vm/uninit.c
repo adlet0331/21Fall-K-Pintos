@@ -36,7 +36,6 @@ uninit_new (struct page *page, void *va, vm_initializer *init,
 		.va = va,
 		.frame = NULL, /* no frame for now */
 		.swapped = false,
-		.write_after_sync =false, // COW를 위해 추가
 		.uninit = (struct uninit_page) {
 			.init = init,
 			.type = type,
@@ -46,7 +45,7 @@ uninit_new (struct page *page, void *va, vm_initializer *init,
 	};
 }
 
-/* DONE : Initalize the page on first fault */
+/* TODO : Initalize the page on first fault */
 // First Page Fault (Try to access a page, no contents)
 // vm_do_claim_page 에서 불리는 함수
 static bool
@@ -57,7 +56,7 @@ uninit_initialize (struct page *page, void *kva) {
 	vm_initializer *init = uninit->init;
 	void *aux = uninit->aux;
 
-	/* DONE: You may need to fix this function. */
+	/* TODO: You may need to fix this function. */
 	// 다른 anon 아니면 file의 page_initializer (처음 각 타입별 page allocate해주는거)
 	// 여기서 init 은 lazy_load_segment임. --> 실제 로딩
 	return uninit->page_initializer (page, uninit->type, kva) &&

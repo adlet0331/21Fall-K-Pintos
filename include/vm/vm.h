@@ -46,16 +46,10 @@ struct page {
 	void *va;              /* Address in terms of user space */
 	struct frame *frame;   /* Back reference for frame */
 	struct hash_elem hash_elem;
-	struct list_elem list_elem;
 	bool original_writable;	// 처음 페이지 만들때 설정된 writable
 	bool file_written; // file page에서 사용
 	bool swapped; // swap_out이 됐는지 판별
 	uint32_t disk_sector; // anon의 swap에서 사용
-
-	bool write_after_sync; //fork 된 후 write 되었는지 표시
-	bool is_loaded; 	// COW를 위해 추가 (page copy 때 alloc을 위해)
-	enum vm_type type; 	// COW를 위해 추가 (page copy 때 alloc을 위해)
-	uint64_t *pml4;
 
 	/* Your implementation */
 
@@ -76,8 +70,6 @@ struct frame {
 	void *kva;
 	struct page *page;
 	struct list_elem elem;
-	// write 요청이 들어오면 다시 load 해주기 위해 만들어둔 list
-	struct list forked_page_list;
 };
 
 /* The function table for page operations.

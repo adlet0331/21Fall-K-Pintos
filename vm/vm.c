@@ -21,7 +21,7 @@ vm_init (void) {
 #endif
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
-	// DONE: Virtual Memory 초기화 - 쓰레드 호출 전
+	// TODO: Virtual Memory 초기화 - 쓰레드 호출 전
 	// frame 리스트 초기화
 	list_init(&frame_list);
 }
@@ -60,19 +60,16 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 	/* Check wheter the upage is already occupied or not. */
 	if (spt_find_page (spt, upage) == NULL) {
-		/* DONE: Create the page, fetch the initialier according to the VM type,
-		 * DONE: and then create "uninit" page struct by calling uninit_new. You
-		 * DONE: should modify the field after calling the uninit_new. */
+		/* TODO: Create the page, fetch the initialier according to the VM type,
+		 * TODO: and then create "uninit" page struct by calling uninit_new. You
+		 * TODO: should modify the field after calling the uninit_new. */
 		
-		/* DONE: Insert the page into the spt. */
+		/* TODO: Insert the page into the spt. */
 		if (type == VM_ANON){
 			struct page *pg = malloc(sizeof(struct page));
 			uninit_new(pg, upage, init, VM_ANON, aux, anon_initializer);
 			spt_insert_page(spt, pg);
 			pg->original_writable = writable;
-			pg->type = VM_ANON;
-			pg->pml4 = thread_current()->pml4;
-			pg->is_loaded = false;
 			return true;
 		}
 		else if (type == VM_FILE){
@@ -81,9 +78,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			spt_insert_page(spt, pg);
 			pg->original_writable = writable; // lazy_load할 때는 page에 write 해야 됨
 			pg->file_written = false; //처음엔 false로 두지만, 나중에 write 할 때 try_handle_fault에서 true로 바꿔줌. munmap 에서 씀
-			pg->type = VM_FILE;
-			pg->pml4 = thread_current()->pml4;
-			pg->is_loaded = false;
 			return true;
 		}
 		else{
@@ -139,7 +133,7 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
-	 /* DONE: The policy for eviction is up to you. */
+	 /* TODO: The policy for eviction is up to you. */
 
 	return victim;
 }
@@ -149,7 +143,7 @@ vm_get_victim (void) {
 static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
-	/* DONE: swap out the victim and return the evicted frame. */
+	/* TODO: swap out the victim and return the evicted frame. */
 
 	return NULL;
 }
@@ -162,11 +156,11 @@ vm_evict_frame (void) {
 static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
-	// DONE : spt 에서 가능한 page 찾아보기
+	// TODO : spt 에서 가능한 page 찾아보기
 
 	void *phys_page = palloc_get_page(PAL_USER);
 	if (phys_page == NULL){
-		// DONE : user pool 가득 찼을 때 예외처리 (프레임 테이블에서 빼서 가져오기)
+		// TODO : user pool 가득 찼을 때 예외처리 (프레임 테이블에서 빼서 가져오기)
 		// 프레임 하나 정해서 swap_out 하기
 		struct list_elem *e = list_pop_front(&frame_list);
 		struct frame *victim = list_entry(e, struct frame, elem);
@@ -176,11 +170,9 @@ vm_get_frame (void) {
 	frame = malloc(sizeof(struct frame));
 	frame->kva = phys_page;
 	frame->page = NULL;
-	list_init(&frame->forked_page_list);
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
-	ASSERT (list_empty(&frame->forked_page_list));
 	return frame;
 }
 
@@ -204,8 +196,8 @@ vm_try_handle_fault (struct intr_frame *f, void *addr,
 		bool user, bool write, bool not_present) {
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
-	/* DONE: Validate the fault */
-	/* DONE: Your code goes here */
+	/* TODO: Validate the fault */
+	/* TODO: Your code goes here */
 	page = spt_find_page(spt, addr);
 	if(page == NULL){
 		// stack growth를 해야 하는 경우
@@ -219,30 +211,7 @@ vm_try_handle_fault (struct intr_frame *f, void *addr,
 		else
 			return false; // 잘못된 주소
 	}
-
-	//forked 당한 frame 이 read only 에 write 요청을 넣어서 들어옴
-	bool asdf = list_empty(&page->frame->forked_page_list);
-	if (write && page->frame != NULL && !list_empty(&page->frame->forked_page_list) && page->is_loaded){
-		// ANON 과 FILE 나눠서 해주기. ANON은 PAGE 하나만 해주면 되지만 FILE은 전체를 MMAP 하는 방법으로 갈 듯
-		// parent는 기존의 frame을 유지하고, child들을 새로 만들어주는 것
-		struct list_elem *le = list_head(&page->frame->forked_page_list);
-		while(le != NULL){
-			struct page *other_forked_page = list_entry(le, struct page, list_elem);
-			other_forked_page->frame = NULL;
-			if (!vm_do_claim_page(other_forked_page))
-				return false;
-			memcpy(other_forked_page->frame->kva, page->frame->kva, PGSIZE);
-			// pml4_set_page(other_forked_page->pml4, other_forked_page->frame, other_forked_page->frame->kva, true);
-
-			other_forked_page = list_next(le);
-		}
-		//부모 page는 이미 되어 있으니 pml4만 갱신해주자
-		struct page *parent_page = page->frame->page;
-		// pml4_set_page(parent_page->pml4, parent_page->frame, parent_page->frame->kva, true);
-	}
-
-	//DONE
-
+	
 	// read only에 write를 시도한 경우
 	if(!page->original_writable && write)
 		return false;
@@ -260,6 +229,7 @@ vm_dealloc_page (struct page *page) {
 }
 
 /* DONE : Claim the page that allocate on VA. */
+// 
 bool
 vm_claim_page (void *va) {
 	/* DONE: Fill this function */
@@ -297,7 +267,6 @@ vm_do_claim_page (struct page *page) {
 
 	// Uninit의 swap_in (uninit_initialize) 임 - 여기서 page initializer로 초기화 시켜준 후 lazy_load_segment 해줌
 	// anon, file의 경우 anon_swap_in, file_swap_in 실행
-	page->is_loaded = true;
 	return swap_in (page, frame->kva);
 }
 
@@ -326,25 +295,21 @@ bool
 supplemental_page_table_copy (struct supplemental_page_table *dst,
 		struct supplemental_page_table *src) {
 	// child에서 실행됨
+	// COW 언젠가 해야 됨
 	// 일단은 모든 page를 복사해서 붙임
 	struct hash_iterator i;
 	hash_first(&i, &src->page_table);
 	while(hash_next(&i)) {
 		struct page *page = hash_entry(hash_cur(&i), struct page, hash_elem);
-		
-		if(!vm_alloc_page(page->type, page->va, page->original_writable)) 
-			return false;
-
+		if(!vm_alloc_page(VM_ANON, page->va, page->original_writable)) return false;
+		vm_claim_page(page->va);
 		struct page *new_page = spt_find_page(dst, page->va);
-
-		if(new_page == NULL) 
-			return false;
-		if(page->frame) { // 이미 frame이 할당된 page라면 -> frame을 같은 걸로 가리키게 하기. frame->page는 parent page 가리키고 있음.
-			new_page->frame = page->frame;
-			list_push_back(&page->frame->forked_page_list, &new_page->list_elem);
-			pml4_set_page(thread_current()->pml4, page->va, new_page->frame->kva, false); // Write 할 때 page fault가 나도록
+		if(new_page == NULL) return false;
+		if(page->frame) { // 이미 frame이 할당된 page라면
+			vm_claim_page(page->va);
+			memcpy(new_page->frame->kva, page->frame->kva, PGSIZE);
 		}
-		else { // lazy_load 때문에 아직 frame 할당 안 된 상태. Cow 할 때 따로 처리할 필요 X
+		else { // lazy_load 때문에 아직 frame 할당 안 된 상태
 			new_page->uninit = page->uninit;
 		}
 	}
@@ -354,8 +319,8 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 /* DONE : Free the resource hold by the supplemental page table */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt) {
-	/* DONE: Destroy all the supplemental_page_table hold by thread and
-	 * DONE: writeback all the modified contents to the storage. */
+	/* TODO: Destroy all the supplemental_page_table hold by thread and
+	 * TODO: writeback all the modified contents to the storage. */
 	struct thread *curr = thread_current();
 	for(int i=0; i<100; i++) if(curr->mmap_list[i]) do_munmap(curr->mmap_list[i]);
 
