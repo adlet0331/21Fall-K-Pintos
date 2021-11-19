@@ -308,7 +308,7 @@ process_wait (tid_t child_tid) {
 	free(child);
 	return result;
 }
- 
+
 /* Exit the process. This function is called by thread_exit (). */
 void
 process_exit (void) {
