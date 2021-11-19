@@ -6,7 +6,6 @@
 #include "threads/malloc.h"
 #include "threads/vaddr.h"
 #include "threads/mmu.h"
-#include "userprog/process.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "vm/uninit.h"
@@ -221,34 +220,32 @@ vm_try_handle_fault (struct intr_frame *f, void *addr,
 			return false; // 잘못된 주소
 	}
 
+	//forked 당한 frame 이 read only 에 write 요청을 넣어서 들어옴
+	bool asdf = list_empty(&page->frame->forked_page_list);
+	if (write && page->frame != NULL && !list_empty(&page->frame->forked_page_list) && page->is_loaded){
+		// ANON 과 FILE 나눠서 해주기. ANON은 PAGE 하나만 해주면 되지만 FILE은 전체를 MMAP 하는 방법으로 갈 듯
+		// parent는 기존의 frame을 유지하고, child들을 새로 만들어주는 것
+		struct list_elem *le = list_head(&page->frame->forked_page_list);
+		while(le != NULL){
+			struct page *other_forked_page = list_entry(le, struct page, list_elem);
+			other_forked_page->frame = NULL;
+			if (!vm_do_claim_page(other_forked_page))
+				return false;
+			memcpy(other_forked_page->frame->kva, page->frame->kva, PGSIZE);
+			// pml4_set_page(other_forked_page->pml4, other_forked_page->frame, other_forked_page->frame->kva, true);
+
+			other_forked_page = list_next(le);
+		}
+		//부모 page는 이미 되어 있으니 pml4만 갱신해주자
+		struct page *parent_page = page->frame->page;
+		// pml4_set_page(parent_page->pml4, parent_page->frame, parent_page->frame->kva, true);
+	}
+
+	//DONE
+
 	// read only에 write를 시도한 경우
 	if(!page->original_writable && write)
 		return false;
-
-	// COW 처리
-	// list가 비어있지 않다 -> 여러 page가 한 frame을 가리키고 있고, copy되지 않음
-	if(write && page->frame && !list_empty(&page->frame->forked_page_list)) {
-		// 기존 frame의 정보에서 page 정보 제거
-		struct frame *frame = page->frame;
-		if(frame->page == page) {
-			struct list_elem *e = list_pop_front(&frame->forked_page_list);
-			struct page *temp = list_entry(e, struct page, list_elem);
-			frame->page = temp;
-		}
-		else {
-			list_remove(&page->list_elem);
-		}
-
-		// 새로운 frame 할당
-		page->frame = vm_get_frame ();
-		list_push_back(&frame_list, &page->frame->elem);
-		page->frame->page = page;
-		if(!pml4_set_page(page->pml4, page->va, page->frame->kva, true))
-			return false;
-		memcpy(page->frame->kva, frame->kva, PGSIZE);
-
-		return true;
-	}
 
 	// Frame 할당 후 성공 여부 반환
 	return vm_do_claim_page (page);
@@ -286,11 +283,11 @@ vm_do_claim_page (struct page *page) {
 		page->frame = frame;
 
 		//pml4 매핑 처음에는 read만 가능하게 하기. write 하려고 하면 또 page_fault 걸려서 아래로 갈 것
-		if (!pml4_set_page(page->pml4, page->va, frame->kva, false))
+		if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, false)) 
 			return false;
 	}
 	else { //read n번 불린 후 write가 불렸을 때
-		if (!pml4_set_page(page->pml4, page->va, frame->kva, page->original_writable))
+		if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->original_writable))
 			return false;
 		page->file_written = true;
 	}
@@ -329,29 +326,26 @@ bool
 supplemental_page_table_copy (struct supplemental_page_table *dst,
 		struct supplemental_page_table *src) {
 	// child에서 실행됨
-	// COW 언젠가 해야 됨
 	// 일단은 모든 page를 복사해서 붙임
 	struct hash_iterator i;
 	hash_first(&i, &src->page_table);
 	while(hash_next(&i)) {
 		struct page *page = hash_entry(hash_cur(&i), struct page, hash_elem);
-		if(!vm_alloc_page(page->type, page->va, page->original_writable))
+		
+		if(!vm_alloc_page(page->type, page->va, page->original_writable)) 
 			return false;
-		struct page *new_page = spt_find_page(dst, page->va);
-		if(page->operations->type == VM_UNINIT) {
-			new_page->uninit = page->uninit;
-			new_page->uninit.aux = malloc(sizeof(struct lazy_load_arg));
-			memcpy(new_page->uninit.aux, page->uninit.aux, sizeof(struct lazy_load_arg));
-		}
-		else {
-			// 실제로 frame을 할당하지 않고 기존 frame에 매핑
-			new_page->operations = page->operations;
 
+		struct page *new_page = spt_find_page(dst, page->va);
+
+		if(new_page == NULL) 
+			return false;
+		if(page->frame) { // 이미 frame이 할당된 page라면 -> frame을 같은 걸로 가리키게 하기. frame->page는 parent page 가리키고 있음.
 			new_page->frame = page->frame;
 			list_push_back(&page->frame->forked_page_list, &new_page->list_elem);
-			// writable을 false로 설정하여 COW를 할 수 있도록 함
-			pml4_set_page(page->pml4, page->va, page->frame->kva, false);
-			pml4_set_page(new_page->pml4, new_page->va, new_page->frame->kva, false);
+			pml4_set_page(thread_current()->pml4, page->va, new_page->frame->kva, false); // Write 할 때 page fault가 나도록
+		}
+		else { // lazy_load 때문에 아직 frame 할당 안 된 상태. Cow 할 때 따로 처리할 필요 X
+			new_page->uninit = page->uninit;
 		}
 	}
 	return true;
