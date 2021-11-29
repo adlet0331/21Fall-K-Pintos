@@ -81,17 +81,21 @@ inode_create (disk_sector_t sector, off_t length) {
 
 	disk_inode = calloc (1, sizeof *disk_inode);
 	if (disk_inode != NULL) {
-		size_t sectors = bytes_to_sectors (length);
-		disk_inode->length = length;
+		// 처음에는 파일 크기를 0byte로 만듦
+		// size_t sectors = bytes_to_sectors (length);
+		// disk_inode->length = length;
+		// disk_inode->magic = INODE_MAGIC;
+		// static char zeros[DISK_SECTOR_SIZE];
+		// disk_inode->start = fat_create_chain(0);
+		// disk_write (filesys_disk, disk_inode->start, zeros);
+		// for(int i = 1; i < sectors; i++)
+		// 	disk_write (filesys_disk, fat_create_chain(disk_inode->start), zeros);
+		// disk_write (filesys_disk, sector, disk_inode);
+		disk_inode->length = 0;
 		disk_inode->magic = INODE_MAGIC;
-		static char zeros[DISK_SECTOR_SIZE];
-		disk_inode->start = fat_create_chain(0);
-		disk_write (filesys_disk, disk_inode->start, zeros);
-		for(int i = 1; i < sectors; i++) {
-			disk_write (filesys_disk, fat_create_chain(disk_inode->start), zeros);
-		}
+		disk_inode->start = 0;
 		disk_write (filesys_disk, sector, disk_inode);
-		success = true; 
+		success = true;
 		free (disk_inode);
 	}
 	return success;
@@ -189,14 +193,6 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 	off_t bytes_read = 0;
 	uint8_t *bounce = NULL;
 
-	// file growth
-	// if(inode->data.length < size + offset) {
-	// 	int step = bytes_to_sectors(size + offset) - bytes_to_sectors(inode->data.length);
-	// 	for(int i = 0; i < step; i++)
-	// 		fat_create_chain(inode->data.start);
-	// 	inode->data.length = size + offset;
-	// }
-
 	while (size > 0) {
 		/* Disk sector to read, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
@@ -253,12 +249,17 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		return 0;
 
 	// file growth
-	// if(inode->data.length < size + offset) {
-	// 	int step = bytes_to_sectors(size + offset) - bytes_to_sectors(inode->data.length);
-	// 	for(int i = 0; i < step; i++)
-	// 		fat_create_chain(inode->data.start);
-	// 	inode->data.length = size + offset;
-	// }
+	if(inode->data.length < size + offset) {
+		int step = bytes_to_sectors(size + offset) - bytes_to_sectors(inode->data.length);
+		static char zeros[DISK_SECTOR_SIZE];
+		for(int i = 0; i < step; i++) {
+			cluster_t clst = fat_create_chain(inode->data.start);
+			if(inode->data.start == 0) inode->data.start = clst;
+			disk_write (filesys_disk, clst, zeros);
+		}
+		inode->data.length = size + offset;
+		disk_write (filesys_disk, inode->sector, &inode->data);
+	}
 
 	while (size > 0) {
 		/* Sector to write, starting byte offset within sector. */
