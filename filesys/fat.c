@@ -134,6 +134,13 @@ fat_create (void) {
 	disk_write (filesys_disk, cluster_to_sector (ROOT_DIR_CLUSTER), buf);
 	free (buf);
 
+	// FAT 빈 blocks들 initialize 해주기
+	for(int i= fat_fs->data_start; i < fat_fs->bs.total_sectors; i++){
+		fat_fs->fat[i] = i+1;
+	}
+	fat_fs->fat[fat_fs->bs.total_sectors - 1] = EOChain;
+	fat_fs->last_clst = fat_fs->data_start;
+
 	// Root directory에 해당하는 indoe 생성
 	inode_create(ROOT_DIR_CLUSTER, DISK_SECTOR_SIZE);
 }
@@ -157,7 +164,7 @@ void
 fat_fs_init (void) {
 	/* TODO: Your code goes here. */
 	fat_fs->fat_length = fat_fs->bs.total_sectors;
-	fat_fs->data_start = fat_fs->bs.fat_sectors + 3;
+	fat_fs->data_start = fat_fs->bs.fat_sectors + 2;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -170,16 +177,18 @@ fat_fs_init (void) {
 cluster_t
 fat_create_chain (cluster_t clst) {
 	/* TODO: Your code goes here. */
-	for(int i = fat_fs->data_start; i < fat_fs->fat_length; i++)
-		if(fat_fs->fat[i] == 0) {
-			fat_fs->fat[i] = EOChain;
-			if(clst != 0) {
-				while(fat_fs->fat[clst] != EOChain) clst = fat_fs->fat[clst];
-				fat_fs->fat[clst] = i;
-			}
-			return i;
+	if (fat_fs->last_clst == EOChain) //free block이 없음
+		return 0;
+	if (clst != 0){
+		while(fat_fs->fat[clst] != EOChain){
+			clst = fat_fs->fat[clst];
 		}
-	return 0;
+		fat_fs->fat[clst] = fat_fs->last_clst;
+	}
+	cluster_t before_last_cluster = fat_fs->last_clst;
+	fat_fs->last_clst = fat_fs->fat[fat_fs->last_clst];
+	fat_fs->fat[before_last_cluster] = EOChain;
+	return before_last_cluster;
 }
 
 /* Remove the chain of clusters starting from CLST.
@@ -187,13 +196,14 @@ fat_create_chain (cluster_t clst) {
 void
 fat_remove_chain (cluster_t clst, cluster_t pclst) {
 	/* TODO: Your code goes here. */
-	ASSERT(pclst == 0 || fat_fs->fat[pclst] == clst);
-	if(pclst != 0) fat_fs->fat[pclst] = EOChain;
-	while(clst != EOChain) {
-		cluster_t temp = fat_fs->fat[clst];
-		fat_fs->fat[clst] = 0;
-		clst = temp;
+	if (pclst != 0)
+		fat_fs->fat[pclst] = EOChain;
+	cluster_t before_last_cluster = clst;
+	while(fat_fs->fat[clst] != EOChain){
+		clst = fat_fs->fat[clst];
 	}
+	fat_fs->fat[clst] = fat_fs->last_clst;
+	fat_fs->last_clst = before_last_cluster;
 }
 
 /* Update a value in the FAT table. */
