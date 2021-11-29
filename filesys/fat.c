@@ -133,6 +133,9 @@ fat_create (void) {
 		PANIC ("FAT create failed due to OOM");
 	disk_write (filesys_disk, cluster_to_sector (ROOT_DIR_CLUSTER), buf);
 	free (buf);
+
+	// Root directory에 해당하는 indoe 생성
+	inode_create(ROOT_DIR_CLUSTER, DISK_SECTOR_SIZE);
 }
 
 void
@@ -144,7 +147,7 @@ fat_boot_create (void) {
 	    .magic = FAT_MAGIC,
 	    .sectors_per_cluster = SECTORS_PER_CLUSTER,
 	    .total_sectors = disk_size (filesys_disk),
-	    .fat_start = 1,
+	    .fat_start = 2,
 	    .fat_sectors = fat_sectors,
 	    .root_dir_cluster = ROOT_DIR_CLUSTER,
 	};
@@ -153,6 +156,8 @@ fat_boot_create (void) {
 void
 fat_fs_init (void) {
 	/* TODO: Your code goes here. */
+	fat_fs->fat_length = fat_fs->bs.total_sectors;
+	fat_fs->data_start = fat_fs->bs.fat_sectors + 3;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -165,6 +170,16 @@ fat_fs_init (void) {
 cluster_t
 fat_create_chain (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	for(int i = fat_fs->data_start; i < fat_fs->fat_length; i++)
+		if(fat_fs->fat[i] == 0) {
+			fat_fs->fat[i] = EOChain;
+			if(clst != 0) {
+				while(fat_fs->fat[clst] != EOChain) clst = fat_fs->fat[clst];
+				fat_fs->fat[clst] = i;
+			}
+			return i;
+		}
+	return 0;
 }
 
 /* Remove the chain of clusters starting from CLST.
@@ -172,22 +187,32 @@ fat_create_chain (cluster_t clst) {
 void
 fat_remove_chain (cluster_t clst, cluster_t pclst) {
 	/* TODO: Your code goes here. */
+	ASSERT(pclst == 0 || fat_fs->fat[pclst] == clst);
+	if(pclst != 0) fat_fs->fat[pclst] = EOChain;
+	while(clst != EOChain) {
+		cluster_t temp = fat_fs->fat[clst];
+		fat_fs->fat[clst] = 0;
+		clst = temp;
+	}
 }
 
 /* Update a value in the FAT table. */
 void
 fat_put (cluster_t clst, cluster_t val) {
 	/* TODO: Your code goes here. */
+	fat_fs->fat[clst] = val;
 }
 
 /* Fetch a value in the FAT table. */
 cluster_t
 fat_get (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	return fat_fs->fat[clst];
 }
 
 /* Covert a cluster # to a sector number. */
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	return clst;
 }

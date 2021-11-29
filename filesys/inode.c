@@ -4,7 +4,7 @@
 #include <round.h>
 #include <string.h>
 #include "filesys/filesys.h"
-#include "filesys/free-map.h"
+#include "filesys/fat.h"
 #include "threads/malloc.h"
 
 /* Identifies an inode. */
@@ -43,8 +43,12 @@ struct inode {
 static disk_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) {
 	ASSERT (inode != NULL);
-	if (pos < inode->data.length)
-		return inode->data.start + pos / DISK_SECTOR_SIZE;
+	if (pos < inode->data.length) {
+		cluster_t clst = inode->data.start;
+		int step = pos / DISK_SECTOR_SIZE;
+		for(int i = 0; i < step; i++) clst = fat_get(clst);
+		return clst;
+	}
 	else
 		return -1;
 }
@@ -80,17 +84,14 @@ inode_create (disk_sector_t sector, off_t length) {
 		size_t sectors = bytes_to_sectors (length);
 		disk_inode->length = length;
 		disk_inode->magic = INODE_MAGIC;
-		if (free_map_allocate (sectors, &disk_inode->start)) {
-			disk_write (filesys_disk, sector, disk_inode);
-			if (sectors > 0) {
-				static char zeros[DISK_SECTOR_SIZE];
-				size_t i;
-
-				for (i = 0; i < sectors; i++) 
-					disk_write (filesys_disk, disk_inode->start + i, zeros); 
-			}
-			success = true; 
-		} 
+		static char zeros[DISK_SECTOR_SIZE];
+		disk_inode->start = fat_create_chain(0);
+		disk_write (filesys_disk, disk_inode->start, zeros);
+		for(int i = 1; i < sectors; i++) {
+			disk_write (filesys_disk, fat_create_chain(disk_inode->start), zeros);
+		}
+		disk_write (filesys_disk, sector, disk_inode);
+		success = true; 
 		free (disk_inode);
 	}
 	return success;
@@ -126,6 +127,10 @@ inode_open (disk_sector_t sector) {
 	inode->deny_write_cnt = 0;
 	inode->removed = false;
 	disk_read (filesys_disk, inode->sector, &inode->data);
+	if(inode->data.magic != INODE_MAGIC) {
+		free(inode);
+		return NULL;
+	}
 	return inode;
 }
 
@@ -159,9 +164,8 @@ inode_close (struct inode *inode) {
 
 		/* Deallocate blocks if removed. */
 		if (inode->removed) {
-			free_map_release (inode->sector, 1);
-			free_map_release (inode->data.start,
-					bytes_to_sectors (inode->data.length)); 
+			fat_remove_chain(inode->sector, 0);
+			fat_remove_chain(inode->data.start, 0);
 		}
 
 		free (inode); 
@@ -184,6 +188,14 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 	uint8_t *buffer = buffer_;
 	off_t bytes_read = 0;
 	uint8_t *bounce = NULL;
+
+	// file growth
+	// if(inode->data.length < size + offset) {
+	// 	int step = bytes_to_sectors(size + offset) - bytes_to_sectors(inode->data.length);
+	// 	for(int i = 0; i < step; i++)
+	// 		fat_create_chain(inode->data.start);
+	// 	inode->data.length = size + offset;
+	// }
 
 	while (size > 0) {
 		/* Disk sector to read, starting byte offset within sector. */
@@ -239,6 +251,14 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
 	if (inode->deny_write_cnt)
 		return 0;
+
+	// file growth
+	// if(inode->data.length < size + offset) {
+	// 	int step = bytes_to_sectors(size + offset) - bytes_to_sectors(inode->data.length);
+	// 	for(int i = 0; i < step; i++)
+	// 		fat_create_chain(inode->data.start);
+	// 	inode->data.length = size + offset;
+	// }
 
 	while (size > 0) {
 		/* Sector to write, starting byte offset within sector. */
