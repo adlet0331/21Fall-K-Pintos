@@ -81,19 +81,14 @@ inode_create (disk_sector_t sector, off_t length) {
 
 	disk_inode = calloc (1, sizeof *disk_inode);
 	if (disk_inode != NULL) {
-		// 처음에는 파일 크기를 0byte로 만듦
-		// size_t sectors = bytes_to_sectors (length);
-		// disk_inode->length = length;
-		// disk_inode->magic = INODE_MAGIC;
-		// static char zeros[DISK_SECTOR_SIZE];
-		// disk_inode->start = fat_create_chain(0);
-		// disk_write (filesys_disk, disk_inode->start, zeros);
-		// for(int i = 1; i < sectors; i++)
-		// 	disk_write (filesys_disk, fat_create_chain(disk_inode->start), zeros);
-		// disk_write (filesys_disk, sector, disk_inode);
-		disk_inode->length = 0;
+		size_t sectors = bytes_to_sectors (length);
+		disk_inode->length = length;
 		disk_inode->magic = INODE_MAGIC;
-		disk_inode->start = 0;
+		static char zeros[DISK_SECTOR_SIZE];
+		disk_inode->start = fat_create_chain(0);
+		disk_write (filesys_disk, disk_inode->start, zeros);
+		for(int i = 1; i < sectors; i++)
+			disk_write (filesys_disk, fat_create_chain(disk_inode->start), zeros);
 		disk_write (filesys_disk, sector, disk_inode);
 		success = true;
 		free (disk_inode);
