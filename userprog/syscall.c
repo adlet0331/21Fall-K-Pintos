@@ -1,19 +1,21 @@
 #include "userprog/syscall.h"
 #include "lib/user/syscall.h"
+#include "lib/string.h"
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/loader.h"
-#include "userprog/gdt.h"
 #include "threads/flags.h"
-#include "intrinsic.h"
+#include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/palloc.h"
+#include "userprog/gdt.h"
+#include "userprog/process.h"
+#include "intrinsic.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
-#include "userprog/process.h"
-#include "threads/malloc.h"
+#include "filesys/directory.h"
 
 struct lock file_lock;
 int std_in, std_out;
@@ -76,9 +78,7 @@ syscall_handler (struct intr_frame *f) {
 			break;
 		case SYS_FORK:
 			if(invalid_pointer(f->R.rdi)) exit(-1);
-			else {
-				f->R.rax = fork(f->R.rdi);
-			}
+			else f->R.rax = fork(f->R.rdi);
 			break;
 		case SYS_EXEC:
 			if(invalid_pointer(f->R.rdi)) exit(-1);
@@ -128,6 +128,28 @@ syscall_handler (struct intr_frame *f) {
 			break;
 		case SYS_MUNMAP:
 			munmap(f->R.rdi);
+			break;
+		case SYS_CHDIR:
+			if(invalid_pointer(f->R.rdi)) exit(-1);
+			f->R.rax = chdir(f->R.rdi);
+			break;
+		case SYS_MKDIR:
+			if(invalid_pointer(f->R.rdi)) exit(-1);
+			f->R.rax = mkdir(f->R.rdi);
+			break;
+		case SYS_READDIR:
+			if(invalid_pointer(f->R.rsi)) exit(-1);
+			f->R.rax = readdir(f->R.rdi, f->R.rsi);
+			break;
+		case SYS_ISDIR:
+			f->R.rax = isdir(f->R.rdi);
+			break;
+		case SYS_INUMBER:
+			f->R.rax = inumber(f->R.rdi);
+			break;
+		case SYS_SYMLINK:
+			if(invalid_pointer(f->R.rdi) || invalid_pointer(f->R.rsi)) exit(-1);
+			f->R.rax = symlink(f->R.rdi, f->R.rsi);
 			break;
 		default:
 			thread_exit();
@@ -543,4 +565,87 @@ mmap(void *addr, size_t length, int writable, int fd, off_t offset) {
 void
 munmap(void *addr) {
 	return do_munmap(addr);
+}
+
+// 현재 작업 중인 디렉토리를 dir로 바꿈
+// 상대 경로일 수도 있고 절대 경로일 수도 있음
+bool
+chdir(const char *dir) {
+	dir_current = get_dir_from_name(dir, true).dir;
+	return dir_current != NULL;
+}
+
+// 이름이 dir인 디렉토리 생성
+// 이미 존재하는 경우 실패
+bool
+mkdir(const char *dir) {
+	struct get_dir_struct dir_struct = get_dir_from_name(dir, false);
+	if(dir_struct.dir == NULL || dir_struct.name == NULL) return false;
+	uint32_t clst = fat_create_chain(0);
+	if(clst == 0) return false;
+	if(!dir_create(clst, 1)) return false;
+	if(!dir_add(dir_struct.dir, dir_struct.name, clst)) return false;
+	dir_close(dir_struct.dir);
+	return true;
+}
+
+// fd로부터 디렉토리 엔트리를 읽어서 name에 저장
+bool
+readdir(int fd, char *name) {
+	struct thread *curr = thread_current();
+	struct file *file = NULL;
+	struct file_descriptor *file_descriptor;
+	if(list_empty(&curr->fd_list)) return NULL;
+	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+		file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->index == fd) {
+			file = file_descriptor->fd;
+			struct dir *dir = dir_open(file_get_inode(file));
+			dir_set_pos(dir, file_tell(file));
+			bool result = dir_readdir(dir, name);
+			file_seek(file, dir_get_pos(dir));
+			return result;
+		}
+	}
+}
+
+// fd가 디렉토리를 가리킨다면 true 반환
+// fd가 일반적인 파일을 가리킨다면 false 반환
+bool
+isdir(int fd) {
+	struct thread *curr = thread_current();
+	struct file *file = NULL;
+	struct file_descriptor *file_descriptor;
+	if(list_empty(&curr->fd_list)) return NULL;
+	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+		file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->index == fd) {
+			file = file_descriptor->fd;
+			return inode_is_directory(file_get_inode(file));
+		}
+	}
+}
+
+// fd가 가리키는 inode의 번호 반환
+// inode의 sector number를 반환하면 됨
+int
+inumber(int fd) {
+	struct thread *curr = thread_current();
+	struct file *file = NULL;
+	struct file_descriptor *file_descriptor;
+	if(list_empty(&curr->fd_list)) return NULL;
+	for(struct list_elem *e = list_front(&curr->fd_list); e != list_end(&curr->fd_list); e = list_next(e)) {
+		file_descriptor = list_entry(e, struct file_descriptor, elem);
+		if(file_descriptor->index == fd) {
+			file = file_descriptor->fd;
+			return inode_get_inumber(file_get_inode(file));
+		}
+	}
+}
+
+// target을 가리키는 이름이 linkpath인 symbolic link 생성
+// 성공하면 0, 실패하면 -1 반환
+int
+symlink(const char *target, const char *linkpath) {
+
 }

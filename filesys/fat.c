@@ -1,6 +1,7 @@
 #include "filesys/fat.h"
 #include "devices/disk.h"
 #include "filesys/filesys.h"
+#include "filesys/directory.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
 #include <stdio.h>
@@ -142,7 +143,8 @@ fat_create (void) {
 	fat_fs->last_clst = fat_fs->data_start;
 
 	// Root directory에 해당하는 indoe 생성
-	inode_create(ROOT_DIR_CLUSTER, DISK_SECTOR_SIZE);
+	dir_create(ROOT_DIR_CLUSTER, 1);
+	dir_current = dir_open_root();
 }
 
 void

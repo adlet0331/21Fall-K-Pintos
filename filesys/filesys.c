@@ -2,6 +2,7 @@
 #include <debug.h>
 #include <stdio.h>
 #include <string.h>
+#include "threads/palloc.h"
 #include "filesys/file.h"
 #include "filesys/fat.h"
 #include "filesys/inode.h"
@@ -60,14 +61,21 @@ filesys_done (void) {
 bool
 filesys_create (const char *name, off_t initial_size) {
 	disk_sector_t inode_sector = 0;
-	struct dir *dir = dir_open_root ();
-	bool success = (dir != NULL
+	struct get_dir_struct dir_struct = get_dir_from_name(name, false);
+	if(dir_struct.dir == NULL || dir_struct.name == NULL) return false;
+	bool success = (dir_struct.dir != NULL
 			&& ((inode_sector = fat_create_chain(0)) != 0)
-			&& inode_create (inode_sector, initial_size)
-			&& dir_add (dir, name, inode_sector));
+			&& inode_create (inode_sector, initial_size, false)
+			&& dir_add (dir_struct.dir, dir_struct.name, inode_sector));
 	if (!success && inode_sector != 0)
 		fat_remove_chain(inode_sector, 0);
-	dir_close (dir);
+	else {
+		struct inode *inode;
+		inode = inode_open(inode_sector);
+		inode_set_parent(inode, inode_get_inumber(dir_get_inode(dir_struct.dir)));
+		inode_close(inode);
+	}
+	dir_close (dir_struct.dir);
 
 	return success;
 }
@@ -79,12 +87,23 @@ filesys_create (const char *name, off_t initial_size) {
  * or if an internal memory allocation fails. */
 struct file *
 filesys_open (const char *name) {
-	struct dir *dir = dir_open_root ();
+	if(strcmp(name, "/") == 0) {
+		struct inode *inode = inode_open(ROOT_DIR_CLUSTER);
+		return file_open(inode);
+	}
+	if(strcmp(name, ".") == 0) {
+		if(inode_is_removed(dir_get_inode(dir_current))) return NULL;
+		struct inode *inode = dir_get_inode(dir_current);
+		return file_open(inode);
+	}
+
+	struct get_dir_struct dir_struct = get_dir_from_name(name, false);
+	if(dir_struct.dir == NULL || dir_struct.name == NULL) return false;
 	struct inode *inode = NULL;
 
-	if (dir != NULL)
-		dir_lookup (dir, name, &inode);
-	dir_close (dir);
+	if (dir_struct.dir != NULL)
+		dir_lookup (dir_struct.dir, dir_struct.name, &inode);
+	dir_close (dir_struct.dir);
 
 	return file_open (inode);
 }
@@ -95,9 +114,11 @@ filesys_open (const char *name) {
  * or if an internal memory allocation fails. */
 bool
 filesys_remove (const char *name) {
-	struct dir *dir = dir_open_root ();
-	bool success = dir != NULL && dir_remove (dir, name);
-	dir_close (dir);
+	if(strcmp(name, "/") == 0) return false;
+	struct get_dir_struct dir_struct = get_dir_from_name(name, false);
+	if(dir_struct.dir == NULL || dir_struct.name == NULL) return false;
+	bool success = dir_struct.dir != NULL && dir_remove (dir_struct.dir, dir_struct.name);
+	dir_close (dir_struct.dir);
 
 	return success;
 }
@@ -119,4 +140,58 @@ do_format (void) {
 #endif
 
 	printf ("done.\n");
+}
+
+struct get_dir_struct
+get_dir_from_name(const char *name, bool until_end) {
+	struct get_dir_struct result;
+	result.dir = NULL; result.name = NULL;
+	struct dir *new_dir = dir_reopen(dir_current);
+	struct inode *inode = NULL;
+
+	int level = 0, i;
+	char *token;
+	char *save_ptr;
+	char *buffer = palloc_get_page(PAL_ZERO);
+
+	// /를 공백으로 바꿔서 parsing할 수 있도록 함
+	for(i = 0; name[i] != 0; i++) {
+		if(name[i] == '/') {
+			buffer[i] = ' ';
+			if(i != 0) level++;
+			else {
+				dir_close(new_dir);
+				new_dir = dir_open_root();
+			}
+		}
+		else buffer[i] = name[i];
+	}
+
+	if(inode_is_removed(dir_get_inode(new_dir))) return result;
+
+	for (token = strtok_r (buffer, " ", &save_ptr), i = 0; token != NULL; token = strtok_r (NULL, " ", &save_ptr), i++){
+		if(i == level && !until_end) break;
+		if(strcmp(token, ".") == 0) {
+			dir_close(new_dir);
+			new_dir = dir_reopen(dir_current);
+			if(new_dir == NULL) return result;
+		}
+		else if(strcmp(token, "..") == 0) {
+			disk_sector_t parent_sector = inode_get_parent(dir_get_inode(new_dir));
+			dir_close(new_dir);
+			new_dir = dir_open(inode_open(parent_sector));
+			if(new_dir == NULL) return result;
+		}
+		else {
+			struct inode *inode;
+			dir_lookup(new_dir, token, &inode);
+			dir_close(new_dir);
+			new_dir = dir_open(inode);
+			if(new_dir == NULL) return result;
+		}
+	}
+
+	result.dir = new_dir;
+	result.name = token;
+	return result;
 }

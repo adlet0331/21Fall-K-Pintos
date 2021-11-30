@@ -11,10 +11,16 @@
 /* Disk used for file system. */
 extern struct disk *filesys_disk;
 
+struct get_dir_struct {
+    struct dir *dir;
+    char *name;
+};
+
 void filesys_init (bool format);
 void filesys_done (void);
 bool filesys_create (const char *name, off_t initial_size);
 struct file *filesys_open (const char *name);
 bool filesys_remove (const char *name);
+struct get_dir_struct get_dir_from_name(const char *name, bool until_end);
 
 #endif /* filesys/filesys.h */

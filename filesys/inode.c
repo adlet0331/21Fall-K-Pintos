@@ -15,8 +15,11 @@
 struct inode_disk {
 	disk_sector_t start;                /* First data sector. */
 	off_t length;                       /* File size in bytes. */
+	bool is_directory; // true: 디렉토리 / false: 일반적인 파일
+	int count; // 안에 sub-디렉토리 또는 파일이 몇 개나 있는지 셈
+	disk_sector_t parent; // 부모 inode의 sector
 	unsigned magic;                     /* Magic number. */
-	uint32_t unused[125];               /* Not used. */
+	uint32_t unused[122];               /* Not used. */
 };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -69,7 +72,7 @@ inode_init (void) {
  * Returns true if successful.
  * Returns false if memory or disk allocation fails. */
 bool
-inode_create (disk_sector_t sector, off_t length) {
+inode_create (disk_sector_t sector, off_t length, bool is_directory) {
 	struct inode_disk *disk_inode = NULL;
 	bool success = false;
 
@@ -83,6 +86,8 @@ inode_create (disk_sector_t sector, off_t length) {
 	if (disk_inode != NULL) {
 		size_t sectors = bytes_to_sectors (length);
 		disk_inode->length = length;
+		disk_inode->is_directory = is_directory;
+		disk_inode->count = 0;
 		disk_inode->magic = INODE_MAGIC;
 		static char zeros[DISK_SECTOR_SIZE];
 		disk_inode->start = fat_create_chain(0);
@@ -326,4 +331,36 @@ inode_allow_write (struct inode *inode) {
 off_t
 inode_length (const struct inode *inode) {
 	return inode->data.length;
+}
+
+bool
+inode_is_directory(struct inode *inode) {
+	return inode->data.is_directory;
+}
+
+int
+inode_get_count(struct inode *inode) {
+	return inode->data.count;
+}
+
+void
+inode_change_count(struct inode *inode, int delta) {
+	inode->data.count += delta;
+	disk_write(filesys_disk, inode->sector, &inode->data);
+}
+
+disk_sector_t
+inode_get_parent(struct inode *inode) {
+	return inode->data.parent;
+}
+
+void
+inode_set_parent(struct inode *inode, disk_sector_t parent) {
+	inode->data.parent = parent;
+	disk_write(filesys_disk, inode->sector, &inode->data);
+}
+
+bool
+inode_is_removed(struct inode *inode) {
+	return inode->removed;
 }

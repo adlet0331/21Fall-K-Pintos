@@ -23,7 +23,7 @@ struct dir_entry {
  * given SECTOR.  Returns true if successful, false on failure. */
 bool
 dir_create (disk_sector_t sector, size_t entry_cnt) {
-	return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+	return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -85,6 +85,8 @@ lookup (const struct dir *dir, const char *name,
 	ASSERT (dir != NULL);
 	ASSERT (name != NULL);
 
+	if(!inode_is_directory(dir->inode)) return false;
+
 	for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 			ofs += sizeof e)
 		if (e.in_use && !strcmp (name, e.name)) {
@@ -132,6 +134,8 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector) {
 	ASSERT (dir != NULL);
 	ASSERT (name != NULL);
 
+	if(!inode_is_directory(dir->inode)) return false;
+
 	/* Check NAME for validity. */
 	if (*name == '\0' || strlen (name) > NAME_MAX)
 		return false;
@@ -157,6 +161,7 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector) {
 	strlcpy (e.name, name, sizeof e.name);
 	e.inode_sector = inode_sector;
 	success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
+	inode_change_count(dir->inode, 1);
 
 done:
 	return success;
@@ -175,6 +180,8 @@ dir_remove (struct dir *dir, const char *name) {
 	ASSERT (dir != NULL);
 	ASSERT (name != NULL);
 
+	if(!inode_is_directory(dir->inode)) return false;
+
 	/* Find directory entry. */
 	if (!lookup (dir, name, &e, &ofs))
 		goto done;
@@ -183,6 +190,10 @@ dir_remove (struct dir *dir, const char *name) {
 	inode = inode_open (e.inode_sector);
 	if (inode == NULL)
 		goto done;
+	if(inode_get_count(inode) != 0) return false;
+	// if(inode_get_inumber(dir_current->inode) == inode_get_inumber(inode)) {
+	// 	작업을 침
+	// }
 
 	/* Erase directory entry. */
 	e.in_use = false;
@@ -191,6 +202,7 @@ dir_remove (struct dir *dir, const char *name) {
 
 	/* Remove inode. */
 	inode_remove (inode);
+	inode_change_count(dir->inode, -1);
 	success = true;
 
 done:
@@ -205,6 +217,8 @@ bool
 dir_readdir (struct dir *dir, char name[NAME_MAX + 1]) {
 	struct dir_entry e;
 
+	if(!inode_is_directory(dir->inode)) return false;
+
 	while (inode_read_at (dir->inode, &e, sizeof e, dir->pos) == sizeof e) {
 		dir->pos += sizeof e;
 		if (e.in_use) {
@@ -213,4 +227,14 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1]) {
 		}
 	}
 	return false;
+}
+
+void
+dir_set_pos(struct dir *dir, int pos) {
+	dir->pos = pos;
+}
+
+int
+dir_get_pos(struct dir *dir) {
+	return dir->pos;
 }
