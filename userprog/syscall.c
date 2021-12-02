@@ -16,6 +16,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "filesys/directory.h"
+#include "filesys/inode.h"
 
 struct lock file_lock;
 int std_in, std_out;
@@ -585,7 +586,12 @@ mkdir(const char *dir) {
 	if(clst == 0) return false;
 	if(!dir_create(clst, 1)) return false;
 	if(!dir_add(dir_struct.dir, dir_struct.name, clst)) return false;
-	dir_close(dir_struct.dir);
+
+	// 생성한 디렉토리의 부모 설정
+	struct inode *inode = inode_open(clst);
+	inode_set_parent(inode, inode_get_inumber(dir_get_inode(dir_struct.dir)));
+	inode_close(inode);
+
 	return true;
 }
 

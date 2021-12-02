@@ -103,7 +103,7 @@ pass tests/filesys/extended/dir-rm-root
 pass tests/filesys/extended/dir-rm-tree
 pass tests/filesys/extended/dir-rmdir
 pass tests/filesys/extended/dir-under-file
-FAIL tests/filesys/extended/dir-vine
+pass tests/filesys/extended/dir-vine
 pass tests/filesys/extended/grow-create
 pass tests/filesys/extended/grow-dir-lg
 pass tests/filesys/extended/grow-file-size
@@ -190,4 +190,4 @@ FAIL tests/filesys/extended/syn-rw-persistence
 FAIL tests/filesys/extended/symlink-file-persistence
 FAIL tests/filesys/extended/symlink-dir-persistence
 FAIL tests/filesys/extended/symlink-link-persistence
-30 of 192 tests failed.
+29 of 192 tests failed.

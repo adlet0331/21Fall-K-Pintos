@@ -191,9 +191,6 @@ dir_remove (struct dir *dir, const char *name) {
 	if (inode == NULL)
 		goto done;
 	if(inode_get_count(inode) != 0) return false;
-	// if(inode_get_inumber(dir_current->inode) == inode_get_inumber(inode)) {
-	// 	작업을 침
-	// }
 
 	/* Erase directory entry. */
 	e.in_use = false;

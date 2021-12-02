@@ -69,7 +69,8 @@ filesys_create (const char *name, off_t initial_size) {
 			&& dir_add (dir_struct.dir, dir_struct.name, inode_sector));
 	if (!success && inode_sector != 0)
 		fat_remove_chain(inode_sector, 0);
-	else {
+	if(success) {
+		// 생성한 파일의 부모 설정
 		struct inode *inode;
 		inode = inode_open(inode_sector);
 		inode_set_parent(inode, inode_get_inumber(dir_get_inode(dir_struct.dir)));
@@ -154,6 +155,9 @@ get_dir_from_name(const char *name, bool until_end) {
 	char *save_ptr;
 	char *buffer = palloc_get_page(PAL_ZERO);
 
+	// 문자열이 비어 있는 경우
+	if(*name == '\0') { new_dir = NULL; goto get_dir_return; };
+
 	// /를 공백으로 바꿔서 parsing할 수 있도록 함
 	for(i = 0; name[i] != 0; i++) {
 		if(name[i] == '/') {
@@ -167,31 +171,33 @@ get_dir_from_name(const char *name, bool until_end) {
 		else buffer[i] = name[i];
 	}
 
-	if(inode_is_removed(dir_get_inode(new_dir))) return result;
+	if(inode_is_removed(dir_get_inode(new_dir))) { new_dir = NULL; goto get_dir_return; }
 
 	for (token = strtok_r (buffer, " ", &save_ptr), i = 0; token != NULL; token = strtok_r (NULL, " ", &save_ptr), i++){
 		if(i == level && !until_end) break;
 		if(strcmp(token, ".") == 0) {
 			dir_close(new_dir);
 			new_dir = dir_reopen(dir_current);
-			if(new_dir == NULL) return result;
+			if(new_dir == NULL) goto get_dir_return;
 		}
 		else if(strcmp(token, "..") == 0) {
 			disk_sector_t parent_sector = inode_get_parent(dir_get_inode(new_dir));
 			dir_close(new_dir);
 			new_dir = dir_open(inode_open(parent_sector));
-			if(new_dir == NULL) return result;
+			if(new_dir == NULL) goto get_dir_return;
 		}
 		else {
 			struct inode *inode;
 			dir_lookup(new_dir, token, &inode);
 			dir_close(new_dir);
 			new_dir = dir_open(inode);
-			if(new_dir == NULL) return result;
+			if(new_dir == NULL) goto get_dir_return;
 		}
 	}
 
+get_dir_return:
 	result.dir = new_dir;
-	result.name = token;
+	result.name = name + (token - buffer);
+	palloc_free_page(buffer);
 	return result;
 }
