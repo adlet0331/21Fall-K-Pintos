@@ -18,8 +18,10 @@ struct inode_disk {
 	bool is_directory; // true: 디렉토리 / false: 일반적인 파일
 	int count; // 안에 sub-디렉토리 또는 파일이 몇 개나 있는지 셈
 	disk_sector_t parent; // 부모 inode의 sector
+	bool is_symlink;
+	char *symlink;
 	unsigned magic;                     /* Magic number. */
-	uint32_t unused[122];               /* Not used. */
+	uint32_t unused[118];               /* Not used. */
 };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -72,7 +74,7 @@ inode_init (void) {
  * Returns true if successful.
  * Returns false if memory or disk allocation fails. */
 bool
-inode_create (disk_sector_t sector, off_t length, bool is_directory) {
+inode_create (disk_sector_t sector, off_t length, bool is_directory, bool is_symlink, char *symlink) {
 	struct inode_disk *disk_inode = NULL;
 	bool success = false;
 
@@ -88,6 +90,8 @@ inode_create (disk_sector_t sector, off_t length, bool is_directory) {
 		disk_inode->length = length;
 		disk_inode->is_directory = is_directory;
 		disk_inode->count = 0;
+		disk_inode->is_symlink = is_symlink;
+		disk_inode->symlink = symlink;
 		disk_inode->magic = INODE_MAGIC;
 		static char zeros[DISK_SECTOR_SIZE];
 		disk_inode->start = fat_create_chain(0);
@@ -336,6 +340,16 @@ inode_length (const struct inode *inode) {
 bool
 inode_is_directory(struct inode *inode) {
 	return inode->data.is_directory;
+}
+
+bool
+inode_is_symlink(struct inode *inode){
+	return inode->data.is_symlink == true;
+}
+
+char *
+inode_get_symlink(struct inode *inode){
+	return inode->data.symlink;
 }
 
 int

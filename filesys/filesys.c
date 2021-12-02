@@ -65,7 +65,7 @@ filesys_create (const char *name, off_t initial_size) {
 	if(dir_struct.dir == NULL || dir_struct.name == NULL) return false;
 	bool success = (dir_struct.dir != NULL
 			&& ((inode_sector = fat_create_chain(0)) != 0)
-			&& inode_create (inode_sector, initial_size, false)
+			&& inode_create (inode_sector, initial_size, false, false, NULL)
 			&& dir_add (dir_struct.dir, dir_struct.name, inode_sector));
 	if (!success && inode_sector != 0)
 		fat_remove_chain(inode_sector, 0);
@@ -105,6 +105,15 @@ filesys_open (const char *name) {
 	if (dir_struct.dir != NULL)
 		dir_lookup (dir_struct.dir, dir_struct.name, &inode);
 	dir_close (dir_struct.dir);
+
+	while (inode_is_symlink(inode)){
+		char *link = inode_get_symlink(inode);
+		dir_struct = get_dir_from_name(link, false);
+
+		if (dir_struct.dir != NULL)
+			dir_lookup (dir_struct.dir, dir_struct.name, &inode);
+		dir_close (dir_struct.dir);
+	}
 
 	return file_open (inode);
 }

@@ -649,9 +649,28 @@ inumber(int fd) {
 	}
 }
 
-// target을 가리키는 이름이 linkpath인 symbolic link 생성
+// target을 가리키는, 이름이 linkpath인 symbolic link 생성
 // 성공하면 0, 실패하면 -1 반환
 int
 symlink(const char *target, const char *linkpath) {
+	disk_sector_t inode_sector = 0;
+	struct dir *current_directory = dir_reopen(dir_current);
+	char *target_string = malloc(sizeof(target));
+	strlcpy(target_string, target, sizeof(target));
+	bool success = (current_directory != NULL
+			&& ((inode_sector = fat_create_chain(0)) != 0)
+			&& inode_create (inode_sector, 0, false, true, target_string)
+			&& dir_add (current_directory, linkpath, inode_sector));
+	if (!success && inode_sector != 0)
+		fat_remove_chain(inode_sector, 0);
+	if(success) {
+		// 생성한 파일의 부모 설정
+		struct inode *inode;
+		inode = inode_open(inode_sector);
+		inode_set_parent(inode, inode_get_inumber(dir_get_inode(current_directory)));
+		inode_close(inode);
+	}
+	dir_close (current_directory);
 
+	return success ? 0 : -1;
 }
