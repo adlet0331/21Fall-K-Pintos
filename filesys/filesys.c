@@ -105,6 +105,7 @@ filesys_open (const char *name) {
 	if (dir_struct.dir != NULL)
 		dir_lookup (dir_struct.dir, dir_struct.name, &inode);
 	dir_close (dir_struct.dir);
+	if(inode == NULL) return NULL;
 
 	while (inode_is_symlink(inode)){
 		char *link = inode_get_symlink(inode);
@@ -171,7 +172,7 @@ get_dir_from_name(const char *name, bool until_end) {
 	for(i = 0; name[i] != 0; i++) {
 		if(name[i] == '/') {
 			buffer[i] = ' ';
-			if(i != 0) level++;
+			if(i != 0 && buffer[i - 1] != ' ') level++;
 			else {
 				dir_close(new_dir);
 				new_dir = dir_open_root();

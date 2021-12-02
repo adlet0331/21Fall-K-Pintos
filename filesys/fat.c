@@ -79,10 +79,15 @@ fat_open (void) {
 			free (bounce);
 		}
 	}
+
+	fat_fs->last_clst = fat_fs->fat[0]; // last_clst 정보 불러옴
+	dir_current = dir_open_root();
 }
 
 void
 fat_close (void) {
+	fat_fs->fat[0] = fat_fs->last_clst; // last_clst 정보 저장함
+
 	// Write FAT boot sector
 	uint8_t *bounce = calloc (1, DISK_SECTOR_SIZE);
 	if (bounce == NULL)
@@ -144,7 +149,6 @@ fat_create (void) {
 
 	// Root directory에 해당하는 indoe 생성
 	dir_create(ROOT_DIR_CLUSTER, 1);
-	dir_current = dir_open_root();
 }
 
 void
