@@ -654,23 +654,29 @@ inumber(int fd) {
 int
 symlink(const char *target, const char *linkpath) {
 	disk_sector_t inode_sector = 0;
-	struct dir *current_directory = dir_reopen(dir_current);
-	char *target_string = malloc(sizeof(target));
-	strlcpy(target_string, target, sizeof(target) + 1);
-	bool success = (current_directory != NULL
+	struct get_dir_struct dir_struct = get_dir_from_name(linkpath, false);
+	struct file *target_file = filesys_open(target);
+	bool success = (dir_struct.dir != NULL
 			&& ((inode_sector = fat_create_chain(0)) != 0)
-			&& inode_create (inode_sector, 0, false, true, target_string)
-			&& dir_add (current_directory, linkpath, inode_sector));
+			&& inode_create (inode_sector, 0, false, true, inode_get_inumber(file_get_inode(target_file)))
+			&& dir_add (dir_struct.dir, dir_struct.name, inode_sector));
 	if (!success && inode_sector != 0)
 		fat_remove_chain(inode_sector, 0);
+	// open에 실패했을 경우 string을 저장
+	if(target_file == NULL) {
+		struct inode *inode;
+		inode = inode_open(inode_sector);
+		inode_set_symlink_string(inode, target);
+		inode_close(inode);
+	}
 	if(success) {
 		// 생성한 파일의 부모 설정
 		struct inode *inode;
 		inode = inode_open(inode_sector);
-		inode_set_parent(inode, inode_get_inumber(dir_get_inode(current_directory)));
+		inode_set_parent(inode, inode_get_inumber(dir_get_inode(dir_struct.dir)));
 		inode_close(inode);
 	}
-	dir_close (current_directory);
+	dir_close (dir_struct.dir);
 
 	return success ? 0 : -1;
 }

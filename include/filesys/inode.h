@@ -8,7 +8,7 @@
 struct bitmap;
 
 void inode_init (void);
-bool inode_create (disk_sector_t, off_t, bool, bool, char *);
+bool inode_create (disk_sector_t, off_t, bool, bool, disk_sector_t);
 struct inode *inode_open (disk_sector_t);
 struct inode *inode_reopen (struct inode *);
 disk_sector_t inode_get_inumber (const struct inode *);
@@ -21,7 +21,9 @@ void inode_allow_write (struct inode *);
 off_t inode_length (const struct inode *);
 bool inode_is_directory(struct inode *);
 bool inode_is_symlink(struct inode *);
-char *inode_get_symlink(struct inode *);
+disk_sector_t inode_get_sym_secter_number(struct inode *);
+int inode_set_symlink_string(struct inode *, char *);
+bool inode_get_symlink_string(struct inode *, char *);
 int inode_get_count(struct inode *);
 void inode_change_count(struct inode *, int);
 disk_sector_t inode_get_parent(struct inode *);

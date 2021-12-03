@@ -18,10 +18,11 @@ struct inode_disk {
 	bool is_directory; // true: 디렉토리 / false: 일반적인 파일
 	int count; // 안에 sub-디렉토리 또는 파일이 몇 개나 있는지 셈
 	disk_sector_t parent; // 부모 inode의 sector
-	bool is_symlink;
-	char *symlink;
+	bool is_symlink; // symlink인가요?
+	disk_sector_t secter_number; // symlink로 가리키는 sector
+	char symlink_name[16]; // symlink 만들 당시에 파일이 없을 경우
 	unsigned magic;                     /* Magic number. */
-	uint32_t unused[118];               /* Not used. */
+	uint32_t unused[116];               /* Not used. */
 };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -74,7 +75,7 @@ inode_init (void) {
  * Returns true if successful.
  * Returns false if memory or disk allocation fails. */
 bool
-inode_create (disk_sector_t sector, off_t length, bool is_directory, bool is_symlink, char *symlink) {
+inode_create (disk_sector_t sector, off_t length, bool is_directory, bool is_symlink, disk_sector_t symlink_sector) {
 	struct inode_disk *disk_inode = NULL;
 	bool success = false;
 
@@ -91,7 +92,7 @@ inode_create (disk_sector_t sector, off_t length, bool is_directory, bool is_sym
 		disk_inode->is_directory = is_directory;
 		disk_inode->count = 0;
 		disk_inode->is_symlink = is_symlink;
-		disk_inode->symlink = symlink;
+		disk_inode->secter_number = symlink_sector;
 		disk_inode->magic = INODE_MAGIC;
 		static char zeros[DISK_SECTOR_SIZE];
 		disk_inode->start = fat_create_chain(0);
@@ -153,6 +154,7 @@ inode_reopen (struct inode *inode) {
 /* Returns INODE's inode number. */
 disk_sector_t
 inode_get_inumber (const struct inode *inode) {
+	if (inode == NULL) return NULL;
 	return inode->sector;
 }
 
@@ -347,9 +349,21 @@ inode_is_symlink(struct inode *inode){
 	return inode->data.is_symlink == true;
 }
 
-char *
-inode_get_symlink(struct inode *inode){
-	return inode->data.symlink;
+disk_sector_t 
+inode_get_sym_secter_number(struct inode *inode){
+	return inode->data.secter_number;
+}
+
+int
+inode_set_symlink_string(struct inode *inode, char *str){
+	int cnt = strlcpy(inode->data.symlink_name, str, sizeof(str) + 1);
+	disk_write(filesys_disk, inode->sector, &inode->data);
+	return cnt;
+}
+
+bool 
+inode_get_symlink_string(struct inode *inode, char *buffer){
+	return strlcpy(buffer, inode->data.symlink_name, sizeof(buffer) + 1) == sizeof(buffer) + 1;
 }
 
 int

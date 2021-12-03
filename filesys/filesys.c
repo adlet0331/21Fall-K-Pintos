@@ -65,7 +65,7 @@ filesys_create (const char *name, off_t initial_size) {
 	if(dir_struct.dir == NULL || dir_struct.name == NULL) return false;
 	bool success = (dir_struct.dir != NULL
 			&& ((inode_sector = fat_create_chain(0)) != 0)
-			&& inode_create (inode_sector, initial_size, false, false, NULL)
+			&& inode_create (inode_sector, initial_size, false, false, 0)
 			&& dir_add (dir_struct.dir, dir_struct.name, inode_sector));
 	if (!success && inode_sector != 0)
 		fat_remove_chain(inode_sector, 0);
@@ -108,12 +108,19 @@ filesys_open (const char *name) {
 	if(inode == NULL) return NULL;
 
 	while (inode_is_symlink(inode)){
-		char *link = inode_get_symlink(inode);
-		dir_struct = get_dir_from_name(link, false);
-
-		if (dir_struct.dir != NULL)
-			dir_lookup (dir_struct.dir, dir_struct.name, &inode);
-		dir_close (dir_struct.dir);
+		struct inode *new_inode;
+		if (inode_get_sym_secter_number(inode) == 0){
+			char str[16];
+			inode_get_symlink_string(inode, str);
+			struct get_dir_struct ds = get_dir_from_name(str, false);
+			return filesys_open(ds.name);
+		}
+		else {
+			new_inode = inode_open(inode_get_sym_secter_number(inode));
+			inode_close(inode);
+			inode = new_inode;
+		}
+		
 	}
 
 	return file_open (inode);
@@ -200,6 +207,12 @@ get_dir_from_name(const char *name, bool until_end) {
 			struct inode *inode;
 			dir_lookup(new_dir, token, &inode);
 			dir_close(new_dir);
+			if(inode == NULL) { new_dir = NULL; goto get_dir_return; }
+			while(inode_is_symlink(inode)){
+				struct inode *new_inode = inode_open(inode_get_sym_secter_number(inode));
+				inode_close(inode);
+				inode = new_inode;
+			}
 			new_dir = dir_open(inode);
 			if(new_dir == NULL) goto get_dir_return;
 		}
