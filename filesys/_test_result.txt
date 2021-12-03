@@ -115,7 +115,7 @@ pass tests/filesys/extended/grow-sparse
 pass tests/filesys/extended/grow-tell
 pass tests/filesys/extended/grow-two-files
 pass tests/filesys/extended/syn-rw
-FAIL tests/filesys/extended/symlink-file
+pass tests/filesys/extended/symlink-file
 FAIL tests/filesys/extended/symlink-dir
 pass tests/filesys/extended/symlink-link
 pass tests/vm/pt-grow-stack
@@ -190,4 +190,4 @@ pass tests/filesys/extended/syn-rw-persistence
 FAIL tests/filesys/extended/symlink-file-persistence
 FAIL tests/filesys/extended/symlink-dir-persistence
 FAIL tests/filesys/extended/symlink-link-persistence
-5 of 192 tests failed.
+4 of 192 tests failed.

@@ -656,7 +656,7 @@ symlink(const char *target, const char *linkpath) {
 	disk_sector_t inode_sector = 0;
 	struct dir *current_directory = dir_reopen(dir_current);
 	char *target_string = malloc(sizeof(target));
-	strlcpy(target_string, target, sizeof(target));
+	strlcpy(target_string, target, sizeof(target) + 1);
 	bool success = (current_directory != NULL
 			&& ((inode_sector = fat_create_chain(0)) != 0)
 			&& inode_create (inode_sector, 0, false, true, target_string)
